@@ -102,12 +102,38 @@ A point A dominates B if A has at least as high quality and no greater cost, wit
 
 ## What does not yet exist
 
-- Production cross-domain ingestion with document-level versus Chunk-level Qrels separated and evaluated (BEIR adapter is future work).
+- Chunk-level evidence labels for additional public domains (the BEIR SciFact document-level adapter is implemented and verified; it deliberately refuses Contextual Chunk Qrels).
 - A complete real API-billing-to-USD pipeline across Anthropic, Voyage and Cohere; cost ledger is externally supplied.
-- High-throughput paid multi-provider inference and actual experimental model sweeps. Existing matrix runs can be repeated with explicit model and distinct output/index identities, then reported here.
+- Paid model sweep results: a dry-run-safe multi-model planner is implemented, but its actual paid API evaluations still need operator credentials and budget approval.
 - Failure-category gold annotations for official 248 Queries.
 - Claim of real Claude or Cohere retrieval benefit in CI. CI uses official data but only offline metadata context and BM25.
 
 ## CI acceptance
 
 CI runs a real Elasticsearch E02 (original) and E05 (metadata control), then runs paired and batch reports on the two actual artifacts using 600 Bootstrap samples and 600 permutations, plus a same-data leaderboard. This verifies the entire reporting pipeline without credentials. The observed outcome is an empirical control, *not* official Contextual Retrieval accuracy.
+
+
+## Phase 5 extension: cross-domain and model sweeps
+
+The BEIR adapter accepts a standard corpus.jsonl, queries.jsonl and qrels/test.tsv with a strict document-level label contract. The SciFact download is pinned to the publisher's published MD5, and the actual source archive SHA-256 plus raw data hashes are recorded.
+
+~~~bash
+crlab data beir-download --out data/raw/beir
+crlab data validate --dataset beir --data-dir data/raw/beir/scifact
+crlab eval run --dataset beir --experiment E02 \
+  --data-dir data/raw/beir/scifact --out runs/scifact-local-bm25
+~~~
+
+Document retrieval uses one full source document as one Chunk object with index 0. Scores named cookbook_pass@K are an implementation artifact for compatibility, not the historical Anthropic scoring of short source Chunks. BEIR grades above 0 become binary relevance for our Recall, NDCG and MRR; published graded BEIR metrics are **not directly comparable** to this binary NDCG.
+
+For Embedding comparisons, the model sweep command creates a unique output directory and Elasticsearch index namespace per model ID:
+
+~~~bash
+crlab matrix sweep --models MODEL_A MODEL_B --ids E01 E03 \
+  --out-root runs/model-sweep --dataset beir \
+  --data-dir data/raw/beir/scifact
+~~~
+
+This prints a full plan and marks paid calls blocked until --allow-paid-api is added. The plan is never executed without --execute. Model names and API keys are supplied by the operator; historical model snapshots are not silently substituted.
+
+The runnable SciFact and Anthropic official CI jobs are independent. Do **not** pool the scores or treat the 5,183-document SciFact setting as a Chunk Contextualization test.

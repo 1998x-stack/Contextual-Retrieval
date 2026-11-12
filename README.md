@@ -147,9 +147,35 @@ crlab report pareto \
   --out reports/generated/pareto
 ~~~
 
-**Cross-model comparison**: collect independent E01/E03/E04/E06/E07/E10 runs with explicit Voyage/Cohere model IDs and stable dataset/Qrels hashes, then pass their run directories to report leaderboard, paired or batch. The statistical layer does not generate paid model outputs itself. Different datasets appear in separate leaderboard groups; do not interpret raw scores across corpora as directly comparable.
+**Cross-model comparison**: plan separate model IDs with isolated output/index namespaces, opt in to paid calls only after review, then compare the executed run artifacts:
+
+~~~bash
+crlab matrix sweep --models YOUR_AVAILABLE_EMBEDDING_A YOUR_AVAILABLE_EMBEDDING_B \
+  --ids E01 E03 --out-root runs/model-sweep --lexical-backend elasticsearch
+# Dry-run only. To execute, configure VOYAGE_API_KEY and append:
+# --allow-paid-api --execute
+~~~
+
+Use the report leaderboard, paired or batch commands on the independently executed model runs. The statistical layer does not generate paid model outputs itself. Different datasets appear in separate leaderboard groups; do not interpret raw scores across corpora as directly comparable.
 
 See docs/07-phase5.md for method assumptions, billing-ledger contract, failure analysis, interpretation and extension plan.
+
+## BEIR SciFact: independent cross-domain document retrieval
+
+The verified SciFact download is fixed to the BEIR publisher checksum. It indexes **one whole document as one retrieval unit**, because BEIR test Qrels are document-level, not Chunk-level:
+
+~~~bash
+crlab data beir-download --dataset scifact --out data/raw/beir
+crlab data validate --dataset beir --data-dir data/raw/beir/scifact
+crlab eval run --dataset beir --experiment E02 \
+  --data-dir data/raw/beir/scifact --out runs/beir-scifact-e02
+crlab report leaderboard --runs runs/beir-scifact-e02 \
+  --metric recall@20 --out reports/generated/beir-scifact
+~~~
+
+Actual executed data: 5,183 scientific documents and 300 test Queries; local BM25 document Recall@20 83.2556%, binary NDCG@20 67.2736%. This is a separate **BEIR extension benchmark**; it must not be compared directly against the Anthropic 737-Chunk Corpus, nor mistaken for standard graded BEIR NDCG.
+
+See docs/08-beir-scifact.md and reports/baselines/phase5-scifact-local-bm25.md.
 
 ## Core research contracts
 
@@ -172,6 +198,7 @@ See docs/07-phase5.md for method assumptions, billing-ledger contract, failure a
 - [Contextualization engine](docs/05-contextualization-engine.md)
 - [Phase 4: BM25 and reranking](docs/06-phase4.md)
 - [Phase 5: Benchmark Statistics](docs/07-phase5.md)
+- [BEIR SciFact extension](docs/08-beir-scifact.md)
 
 ## Provenance
 

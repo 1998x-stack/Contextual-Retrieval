@@ -11,7 +11,7 @@ Reconstruct each part of Anthropic's Contextual Retrieval evaluation without con
 | 2 | Baselines | Vector, BM25, hybrid; per-query artifacts and CLI |
 | 3 | Contextualization | Chunk-specific prompt, original-context preservation, cache and usage; offline metadata control and E04–E06 wiring |
 | 4 | Reranking | Elasticsearch English BM25, Cohere adapter, E01–E10 matrix, fixed vs Cookbook candidate pools, CI ES integration |
-| 5 | Statistical benchmark | Paired bootstrap and sign-flip, Holm correction, per-query failure analysis, dataset-safe leaderboards, cost Pareto; prepare cross-model/corpus extensions |
+| 5 | Statistical & cross-domain benchmark | Paired bootstrap/sign-flip, Holm, query errors, per-dataset leaderboard, Pareto, verified SciFact BEIR document adapter, isolated model-sweep planner |
 | 6 | Agent Memory | Temporal-aware and session-aware queries and evidence validity |
 
 ## Tracks
