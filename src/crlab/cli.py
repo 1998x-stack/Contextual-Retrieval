@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -14,7 +15,7 @@ from crlab.contextualization.artifacts import generate_context_bundle, load_cont
 from crlab.contextualization.engine import AnthropicContextualizer, MetadataContextualizer
 from crlab.datasets.anthropic import load_dataset
 from crlab.experiments.runner import file_hash, run, save_run
-from crlab.experiments.matrix import PHASE4_EXPERIMENTS, experiment_spec
+from crlab.experiments.matrix import PHASE4_EXPERIMENTS, experiment_spec, plan_matrix
 
 OFFICIAL_BASE = (
     "https://raw.githubusercontent.com/anthropics/claude-cookbooks/"
@@ -210,6 +211,34 @@ def list_matrix() -> None:
         )
 
 
+def run_matrix(args: argparse.Namespace) -> None:
+    items = plan_matrix(
+        args.ids,
+        data_dir=str(args.data_dir),
+        out_root=str(args.out_root),
+        context_dir=str(args.context_dir) if args.context_dir else None,
+        lexical_backend=args.lexical_backend,
+        es_url=args.es_url,
+        es_recreate_index=args.es_recreate_index,
+        embedding_model=args.embedding_model,
+        rerank_model=args.rerank_model,
+        rerank_mode=args.rerank_mode,
+        allow_paid_api=args.allow_paid_api,
+    )
+    print(json.dumps({"execute": args.execute, "experiments": items}, indent=2))
+    if not args.execute:
+        return
+    blocked = [item for item in items if item["blockers"]]
+    if blocked:
+        raise ValueError(
+            "Cannot execute blocked batch: " +
+            "; ".join(item["experiment"] + ": " + ", ".join(item["blockers"])
+                      for item in blocked)
+        )
+    for item in items:
+        subprocess.run(item["command"], check=True)
+
+
 def compare(paths: list[Path]) -> None:
     for path in paths:
         metrics = json.loads((path / "metrics.json").read_text(encoding="utf-8"))
@@ -274,6 +303,22 @@ def main(argv: list[str] | None = None) -> None:
     matrix_parser = subs.add_parser("matrix", help="List E01-E10 experiment recipes")
     matrix_sub = matrix_parser.add_subparsers(dest="matrix_cmd", required=True)
     matrix_sub.add_parser("list")
+    matrix_run = matrix_sub.add_parser("run", help="Plan E01-E10; execute only with --execute")
+    matrix_run.add_argument("--ids", nargs="+",
+                            choices=sorted(PHASE4_EXPERIMENTS),
+                            default=list(PHASE4_EXPERIMENTS))
+    matrix_run.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
+    matrix_run.add_argument("--out-root", type=Path, default=Path("runs/phase4"))
+    matrix_run.add_argument("--context-dir", type=Path, default=None)
+    matrix_run.add_argument("--lexical-backend", choices=["local", "elasticsearch"],
+                            default="elasticsearch")
+    matrix_run.add_argument("--es-url", default="http://localhost:9200")
+    matrix_run.add_argument("--es-recreate-index", action="store_true")
+    matrix_run.add_argument("--embedding-model", default="voyage-2")
+    matrix_run.add_argument("--rerank-model", default=None)
+    matrix_run.add_argument("--rerank-mode", choices=["fixed", "cookbook"], default="fixed")
+    matrix_run.add_argument("--allow-paid-api", action="store_true")
+    matrix_run.add_argument("--execute", action="store_true")
 
     report = subs.add_parser("report", help="Compare executed runs")
     report_sub = report.add_subparsers(dest="report_cmd", required=True)
@@ -295,7 +340,10 @@ def main(argv: list[str] | None = None) -> None:
         elif args.namespace == "eval":
             evaluate(args)
         elif args.namespace == "matrix":
-            list_matrix()
+            if args.matrix_cmd == "list":
+                list_matrix()
+            else:
+                run_matrix(args)
         else:
             compare(args.runs)
     except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
