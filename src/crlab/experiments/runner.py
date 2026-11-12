@@ -211,6 +211,8 @@ def save_run(
     reranker_model: str | None = None,
     rerank_mode: str = "fixed",
     experiment_id: str | None = None,
+    dataset_kind: str = "anthropic_chunk",
+    query_source_path: str | Path | None = None,
 ) -> None:
     path = Path(out)
     if path.exists() and any(path.iterdir()):
@@ -236,6 +238,9 @@ def save_run(
         "corpus_sha256": file_hash(corpus_path),
         "evaluation_sha256": file_hash(evaluation_path),
         "query_count": len(per_query),
+        "dataset_kind": dataset_kind,
+        "label_granularity": "document" if dataset_kind == "beir_document" else "chunk",
+        "query_source_sha256": file_hash(query_source_path) if query_source_path else None,
         "context": (
             {
                 "strategy": context_manifest["strategy"],

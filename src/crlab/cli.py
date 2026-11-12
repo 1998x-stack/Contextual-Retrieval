@@ -20,6 +20,7 @@ from crlab.analysis.reporting import (
 from crlab.contextualization.artifacts import generate_context_bundle, load_context_bundle
 from crlab.contextualization.engine import AnthropicContextualizer, MetadataContextualizer
 from crlab.datasets.anthropic import load_dataset
+from crlab.datasets.beir import load_dataset as load_beir_dataset, paths as beir_paths
 from crlab.experiments.runner import file_hash, run, save_run
 from crlab.experiments.matrix import PHASE4_EXPERIMENTS, experiment_spec, plan_matrix
 
@@ -71,7 +72,27 @@ def download(data_dir: Path, force: bool = False) -> None:
     print(json.dumps(manifest, indent=2))
 
 
-def validate(data_dir: Path, *, expect_official: bool = False) -> None:
+def validate(
+    data_dir: Path, *, expect_official: bool = False,
+    dataset_format: str = "anthropic", beir_split: str = "test",
+) -> None:
+    if dataset_format == "beir":
+        if expect_official:
+            raise ValueError("--expect-official is only valid for the Anthropic dataset")
+        corpus, queries, qrels = beir_paths(data_dir, split=beir_split)
+        dataset = load_beir_dataset(corpus, queries, qrels)
+        print(json.dumps({
+            "format": "beir_document",
+            "label_granularity": "document",
+            "documents": dataset.document_count,
+            "chunks": len(dataset.chunks),
+            "queries": len(dataset.queries),
+            "corpus_sha256": file_hash(corpus),
+            "query_source_sha256": file_hash(queries),
+            "evaluation_sha256": file_hash(qrels),
+            "split": beir_split,
+        }, indent=2))
+        return
     corpus, eval_file = _files(data_dir)
     dataset = load_dataset(corpus, eval_file)
     counts = {
@@ -111,8 +132,20 @@ def evaluate(args: argparse.Namespace) -> None:
         raise RuntimeError("Reranking is billable: pass --allow-paid-api")
     if args.rerank_mode == "cookbook" and (args.rerank_model is None or method != "vector"):
         raise ValueError("Cookbook rerank mode needs vector and --rerank-model")
-    corpus, eval_file = _files(Path(args.data_dir))
-    dataset = load_dataset(corpus, eval_file)
+    source_queries_path = None
+    if args.dataset == "beir":
+        if args.context_dir is not None:
+            raise ValueError(
+                "BEIR has document-level Qrels; contextual chunk index requires "
+                "an evidence-labeled chunk dataset, not fabricated Chunk Qrels"
+            )
+        corpus, source_queries_path, eval_file = beir_paths(
+            Path(args.data_dir), split=args.beir_split
+        )
+        dataset = load_beir_dataset(corpus, source_queries_path, eval_file)
+    else:
+        corpus, eval_file = _files(Path(args.data_dir))
+        dataset = load_dataset(corpus, eval_file)
     contexts = None
     context_manifest = None
     if args.context_dir is not None:
@@ -169,6 +202,8 @@ def evaluate(args: argparse.Namespace) -> None:
         reranker_model=args.rerank_model,
         rerank_mode=args.rerank_mode,
         experiment_id=args.experiment,
+        dataset_kind=("beir_document" if args.dataset == "beir" else "anthropic_chunk"),
+        query_source_path=source_queries_path,
     )
     print(json.dumps({"out": args.out, "metrics": scores}, indent=2))
 
@@ -310,6 +345,8 @@ def main(argv: list[str] | None = None) -> None:
     validate_parser = data_sub.add_parser("validate")
     validate_parser.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
     validate_parser.add_argument("--expect-official", action="store_true")
+    validate_parser.add_argument("--dataset", choices=["anthropic", "beir"], default="anthropic")
+    validate_parser.add_argument("--beir-split", default="test")
 
     context = subs.add_parser("context", help="Generate or validate chunk contexts")
     context_sub = context.add_subparsers(dest="context_cmd", required=True)
@@ -330,6 +367,8 @@ def main(argv: list[str] | None = None) -> None:
     eval_sub = evaluation.add_subparsers(dest="eval_cmd", required=True)
     run_parser = eval_sub.add_parser("run")
     run_parser.add_argument("--data-dir", default="data/raw/anthropic")
+    run_parser.add_argument("--dataset", choices=["anthropic", "beir"], default="anthropic")
+    run_parser.add_argument("--beir-split", default="test")
     run_parser.add_argument("--method", choices=["bm25", "vector", "hybrid"])
     run_parser.add_argument("--experiment", choices=sorted(PHASE4_EXPERIMENTS))
     run_parser.add_argument("--out", required=True)
@@ -403,7 +442,8 @@ def main(argv: list[str] | None = None) -> None:
             if args.data_cmd == "download":
                 download(args.out, args.force)
             else:
-                validate(args.data_dir, expect_official=args.expect_official)
+                validate(args.data_dir, expect_official=args.expect_official,
+                         dataset_format=args.dataset, beir_split=args.beir_split)
         elif args.namespace == "context":
             if args.context_cmd == "generate":
                 context_generate(args)
