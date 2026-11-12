@@ -11,7 +11,8 @@ This repository distinguishes **official reference numbers**, **independent repr
 - Phase 2: exact dot-product vector retrieval, local BM25, weighted rank fusion, CLI, JSONL ranking artifacts, deterministic tests.
 - Phase 3: offline metadata control, official Claude contextualizer, prompt caching, resumable SQLite context cache, checksum-validated context bundles, E04–E06 retrieval integration.
 - Phase 4: Elasticsearch English-analyzer BM25, Cohere rerank adapter, E01–E10 registry, and fixed-pool versus Cookbook rerank evaluation.
-- Planned: cross-dataset evaluation, statistical significance, Agent Memory.
+- Phase 5: strict executed-run validation, paired/cluster bootstrap, paired sign-flip tests, Holm-adjusted ablations, query failure analysis, dataset-safe leaderboards, cost Pareto.
+- Planned: expanded document-level/Chunk-level cross-domain datasets and Agent Memory.
 
 ## Quickstart
 
@@ -112,6 +113,44 @@ crlab matrix run --ids E02 E05 \
 
 See [Phase 4 design and reproduction table](docs/06-phase4.md).
 
+## Phase 5: Statistical Benchmark Analysis
+
+Analyze executed artifacts offline, without model credentials or external API calls:
+
+~~~bash
+crlab report paired \
+  --baseline runs/e02-elasticsearch \
+  --candidate runs/e05-elasticsearch \
+  --metric recall@20 \
+  --resamples 2000 --permutations 5000 --seed 42 \
+  --out reports/generated/e02-vs-e05
+
+crlab report batch \
+  --baseline runs/e02-elasticsearch \
+  --candidates runs/e05-elasticsearch runs/other-executed-method \
+  --metric recall@20 --out reports/generated/ablations
+
+crlab report leaderboard \
+  --runs runs/e02-elasticsearch runs/e05-elasticsearch \
+  --metric recall@20 --out reports/generated/leaderboard
+~~~
+
+Reports include query-level delta JSONL and CSV, seeded 95% paired-bootstrap intervals, two-sided sign-flip p-values, and Holm correction for multi-run families. Comparisons refuse source dataset/Qrels/query-text mismatch. Optional human-supplied query category and cluster labels are supported with --query-labels (see docs/07-phase5.md); untagged queries remain explicitly unlabeled.
+
+Cost–quality Pareto requires an externally prepared, *complete* cost ledger. Unknown total costs are never silently treated as zero:
+
+~~~bash
+crlab report pareto \
+  --runs runs/e02-elasticsearch runs/e05-elasticsearch \
+  --metric recall@20 \
+  --costs costs/verified-total-costs.json \
+  --out reports/generated/pareto
+~~~
+
+**Cross-model comparison**: collect independent E01/E03/E04/E06/E07/E10 runs with explicit Voyage/Cohere model IDs and stable dataset/Qrels hashes, then pass their run directories to report leaderboard, paired or batch. The statistical layer does not generate paid model outputs itself. Different datasets appear in separate leaderboard groups; do not interpret raw scores across corpora as directly comparable.
+
+See docs/07-phase5.md for method assumptions, billing-ledger contract, failure analysis, interpretation and extension plan.
+
 ## Core research contracts
 
 - The original 90-document/737-chunk/248-query figures are **reference metadata**, validated against downloaded files at execution time.
@@ -132,6 +171,7 @@ See [Phase 4 design and reproduction table](docs/06-phase4.md).
 - [Experiment matrix](docs/04-experiment-matrix.md)
 - [Contextualization engine](docs/05-contextualization-engine.md)
 - [Phase 4: BM25 and reranking](docs/06-phase4.md)
+- [Phase 5: Benchmark Statistics](docs/07-phase5.md)
 
 ## Provenance
 

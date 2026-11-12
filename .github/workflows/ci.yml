@@ -80,9 +80,15 @@ jobs:
       - run: crlab eval run --experiment E02 --lexical-backend elasticsearch --es-index crlab_official_e02 --out runs/e02-elasticsearch
       - run: crlab context generate --provider metadata --out runs/metadata-context
       - run: crlab eval run --experiment E05 --context-dir runs/metadata-context --lexical-backend elasticsearch --es-index crlab_metadata_e05 --out runs/e05-elasticsearch
+      - run: crlab report paired --baseline runs/e02-elasticsearch --candidate runs/e05-elasticsearch --metric recall@20 --resamples 600 --permutations 600 --out reports/generated/es-paired
+      - run: crlab report batch --baseline runs/e02-elasticsearch --candidates runs/e05-elasticsearch --metric recall@20 --resamples 600 --permutations 600 --out reports/generated/es-batch
+      - run: crlab report leaderboard --runs runs/e02-elasticsearch runs/e05-elasticsearch --metric recall@20 --out reports/generated/es-leaderboard
       - uses: actions/upload-artifact@v4
         with:
           name: phase4-es-bm25-results
           path: |
             runs/e02-elasticsearch/
             runs/e05-elasticsearch/
+            reports/generated/es-paired/
+            reports/generated/es-batch/
+            reports/generated/es-leaderboard/
