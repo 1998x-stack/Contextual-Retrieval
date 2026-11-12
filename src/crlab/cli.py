@@ -23,7 +23,9 @@ from crlab.datasets.anthropic import load_dataset
 from crlab.datasets.beir import load_dataset as load_beir_dataset, paths as beir_paths
 from crlab.datasets.beir_download import download_scifact
 from crlab.experiments.runner import file_hash, run, save_run
-from crlab.experiments.matrix import PHASE4_EXPERIMENTS, experiment_spec, plan_matrix
+from crlab.experiments.matrix import (
+    PHASE4_EXPERIMENTS, experiment_spec, plan_matrix, plan_model_sweep,
+)
 
 OFFICIAL_BASE = (
     "https://raw.githubusercontent.com/anthropics/claude-cookbooks/"
@@ -266,6 +268,9 @@ def run_matrix(args: argparse.Namespace) -> None:
         rerank_model=args.rerank_model,
         rerank_mode=args.rerank_mode,
         allow_paid_api=args.allow_paid_api,
+        index_namespace=args.es_index_namespace,
+        dataset_format=args.dataset,
+        beir_split=args.beir_split,
     )
     print(json.dumps({"execute": args.execute, "experiments": items}, indent=2))
     if not args.execute:
@@ -279,6 +284,30 @@ def run_matrix(args: argparse.Namespace) -> None:
         )
     for item in items:
         subprocess.run(item["command"], check=True)
+
+
+def run_model_sweep(args: argparse.Namespace) -> None:
+    models = plan_model_sweep(
+        args.models, args.ids,
+        out_root=str(args.out_root), data_dir=str(args.data_dir),
+        context_dir=str(args.context_dir) if args.context_dir else None,
+        lexical_backend=args.lexical_backend, es_url=args.es_url,
+        rerank_model=args.rerank_model, rerank_mode=args.rerank_mode,
+        allow_paid_api=args.allow_paid_api,
+        dataset_format=args.dataset, beir_split=args.beir_split,
+    )
+    print(json.dumps({"execute": args.execute, "model_sweep": models}, indent=2))
+    if not args.execute:
+        return
+    failures = [
+        f"{item['model']} / {exp['experiment']}: {', '.join(exp['blockers'])}"
+        for item in models for exp in item["experiments"] if exp["blockers"]
+    ]
+    if failures:
+        raise ValueError("Blocked model sweep: " + "; ".join(failures))
+    for item in models:
+        for experiment in item["experiments"]:
+            subprocess.run(experiment["command"], check=True)
 
 
 def compare(paths: list[Path]) -> None:
@@ -398,6 +427,9 @@ def main(argv: list[str] | None = None) -> None:
                             choices=sorted(PHASE4_EXPERIMENTS),
                             default=list(PHASE4_EXPERIMENTS))
     matrix_run.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
+    matrix_run.add_argument("--dataset", choices=["anthropic", "beir"], default="anthropic")
+    matrix_run.add_argument("--beir-split", default="test")
+    matrix_run.add_argument("--es-index-namespace", default="crlab_phase4")
     matrix_run.add_argument("--out-root", type=Path, default=Path("runs/phase4"))
     matrix_run.add_argument("--context-dir", type=Path, default=None)
     matrix_run.add_argument("--lexical-backend", choices=["local", "elasticsearch"],
@@ -409,6 +441,25 @@ def main(argv: list[str] | None = None) -> None:
     matrix_run.add_argument("--rerank-mode", choices=["fixed", "cookbook"], default="fixed")
     matrix_run.add_argument("--allow-paid-api", action="store_true")
     matrix_run.add_argument("--execute", action="store_true")
+
+    sweep = matrix_sub.add_parser(
+        "sweep", help="Plan isolated multi-embedding-model experiments; --execute to run"
+    )
+    sweep.add_argument("--models", nargs="+", required=True)
+    sweep.add_argument("--ids", nargs="+", choices=sorted(PHASE4_EXPERIMENTS),
+                       default=["E01", "E03"])
+    sweep.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
+    sweep.add_argument("--dataset", choices=["anthropic", "beir"], default="anthropic")
+    sweep.add_argument("--beir-split", default="test")
+    sweep.add_argument("--out-root", type=Path, default=Path("runs/model-sweep"))
+    sweep.add_argument("--context-dir", type=Path)
+    sweep.add_argument("--lexical-backend", choices=["local", "elasticsearch"],
+                       default="elasticsearch")
+    sweep.add_argument("--es-url", default="http://localhost:9200")
+    sweep.add_argument("--rerank-model")
+    sweep.add_argument("--rerank-mode", choices=["fixed", "cookbook"], default="fixed")
+    sweep.add_argument("--allow-paid-api", action="store_true")
+    sweep.add_argument("--execute", action="store_true")
 
     report = subs.add_parser("report", help="Compare executed runs")
     report_sub = report.add_subparsers(dest="report_cmd", required=True)
@@ -460,8 +511,10 @@ def main(argv: list[str] | None = None) -> None:
         elif args.namespace == "matrix":
             if args.matrix_cmd == "list":
                 list_matrix()
-            else:
+            elif args.matrix_cmd == "run":
                 run_matrix(args)
+            else:
+                run_model_sweep(args)
         else:
             report_analysis(args)
     except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
