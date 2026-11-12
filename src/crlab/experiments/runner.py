@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Protocol, Sequence
+from typing import Mapping, Protocol, Sequence
 
 from crlab.evaluation.metrics import aggregate, evaluate_query
 from crlab.retrieval.bm25 import LocalBM25
@@ -38,6 +38,7 @@ def run(
     candidate_pool: int = 150,
     semantic_weight: float = 0.8,
     bm25_weight: float = 0.2,
+    context_by_id: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, float], list[dict]]:
     """Execute a complete query set; results are real rankings, never reference values."""
     if method not in {"bm25", "vector", "hybrid"}:
@@ -50,11 +51,22 @@ def run(
         raise ValueError(f"Method {method} requires an explicit embedder")
 
     by_id = dataset.chunk_by_id
-    bm25 = LocalBM25(dataset.chunks) if method in {"bm25", "hybrid"} else None
+    if context_by_id is not None and set(context_by_id) != set(by_id):
+        raise ValueError("Context must cover all original chunks, without extras")
+    # Context is indexed, but original chunk bodies remain the evaluation evidence.
+    text_by_id = {
+        key: f"{context_by_id[key]}\n\n{chunk.content}" if context_by_id is not None
+        else chunk.content
+        for key, chunk in by_id.items()
+    }
+    bm25 = LocalBM25(
+        dataset.chunks,
+        context_by_id=dict(context_by_id) if context_by_id is not None else None,
+    ) if method in {"bm25", "hybrid"} else None
     vector = None
     if method in {"vector", "hybrid"}:
         assert embedder is not None
-        embeddings = embedder.embed_documents([chunk.content for chunk in dataset.chunks])
+        embeddings = embedder.embed_documents([text_by_id[chunk.chunk_id] for chunk in dataset.chunks])
         vector = ExactVector(
             dataset.chunks,
             embeddings,
@@ -106,6 +118,7 @@ def save_run(
     model_name: str | None = None,
     candidate_pool: int = 150,
     weights: tuple[float, float] = (0.8, 0.2),
+    context_manifest: dict | None = None,
 ) -> None:
     path = Path(out)
     if path.exists() and any(path.iterdir()):
@@ -125,6 +138,14 @@ def save_run(
         "corpus_sha256": file_hash(corpus_path),
         "evaluation_sha256": file_hash(evaluation_path),
         "query_count": len(per_query),
+        "context": (
+            {
+                "strategy": context_manifest["strategy"],
+                "model": context_manifest["model"],
+                "prompt_version": context_manifest["prompt_version"],
+                "records_sha256": context_manifest["records_sha256"],
+            } if context_manifest is not None else None
+        ),
         "notes": (
             "This is an independently executed result, not an official score. "
             "Local BM25 does not replicate the Elasticsearch English analyzer."
