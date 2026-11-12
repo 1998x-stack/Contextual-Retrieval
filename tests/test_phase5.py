@@ -287,7 +287,8 @@ def test_tampered_query_ranking_is_detected_even_if_scores_look_consistent(synth
     rows = [json.loads(line) for line in ranking_file.read_text().splitlines()]
     rows[0]["rankings"][0]["chunk_id"] = "doc-A:0"  # now gold at rank 1
     ranking_file.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
-    with pytest.raises(ValueError, match="Ranking and ID metric disagree"):
+    # Duplicate-ID detection rejects the tampering before metric replay.
+    with pytest.raises(ValueError, match="duplicate ranked chunk identity"):
         load_run(left)
 
 
