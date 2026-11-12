@@ -1,0 +1,19 @@
+{
+  "source_repository": "anthropics/claude-cookbooks",
+  "source_commit": "ce8b2629efe8b24048b127b4c79af1e9cbab93d4",
+  "source_path": "capabilities/contextual-embeddings/data",
+  "captured_at": "2026-11-12",
+  "documents": 90,
+  "chunks": 737,
+  "queries": 248,
+  "files": {
+    "codebase_chunks.json": {
+      "sha256": "70dbed1cb8a90a107b23742b1537051346860f841ec8b03734c1298fa4a34d46",
+      "bytes": 1126046
+    },
+    "evaluation_set.jsonl": {
+      "sha256": "7186e2bed15547a2ed178134876b29e4abb206bf0394facbe61d58bf835ee073",
+      "bytes": 3571229
+    }
+  }
+}
