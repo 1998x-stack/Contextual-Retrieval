@@ -97,6 +97,25 @@ crlab eval run --experiment E10 \
   --out runs/e10
 ~~~
 
+## Whole-matrix execution, with safety preflight
+
+~~~bash
+# Creates JSON plan only, without network requests or index mutation:
+crlab matrix run --ids E01 E02 E03 E04 E05 E06 E07 E08 E09 E10
+
+# Offline E02 + E05 (the context here is metadata-only, not Claude):
+crlab matrix run --ids E02 E05 --context-dir runs/metadata-context \
+  --lexical-backend elasticsearch --out-root runs/batch-offline --execute
+
+# Fully configured paid experiment suite (after API costs are approved):
+crlab matrix run --context-dir runs/claude-context \
+  --rerank-model YOUR_COHERE_MODEL_ID --allow-paid-api \
+  --embedding-model voyage-2 --lexical-backend elasticsearch \
+  --out-root runs/paid-full-ablation --execute
+~~~
+
+Every plan prints the full Python subprocess commands, the experiment ID, whether the call is billable, and any missing prerequisites. A batch with any blocked experiment aborts *before* running any jobs. The planner checks existing output paths to avoid overwriting prior results. Rerank mode cookbook is only permitted on vector retrievers. Each experiment produces its own immutable output directory under the chosen out-root.
+
 ## How to interpret the results
 
 - Legacy Cookbook Pass@K compares strings, whereas this lab also measures stable-ID Recall@K, Hit@K, MRR and NDCG.
