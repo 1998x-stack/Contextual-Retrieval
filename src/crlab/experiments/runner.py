@@ -224,7 +224,9 @@ def save_run(
         "experiment_id": experiment_id,
         "method": method,
         "vector_model": model_name,
-        "lexical_engine": lexical_backend if method != "vector" else None,
+        "lexical_engine": (
+            "local_python_bm25" if lexical_backend == "local" else "elasticsearch_bm25"
+        ) if method != "vector" else None,
         "elasticsearch_index": es_index_name if lexical_backend == "elasticsearch" else None,
         "candidate_pool": candidate_pool,
         "reranker_model": reranker_model,
