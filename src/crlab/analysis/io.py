@@ -38,11 +38,33 @@ def _verify_id_metrics(row: dict, run_path: Path) -> None:
         if not isinstance(entries, list):
             raise ValueError(f"Missing saved ranking at cutoff {k}: {run_path}")
         hits = []
+        seen_ids: set[str] = set()
         for index, item in enumerate(entries, 1):
             identity = item.get("chunk_id") if isinstance(item, dict) else None
-            if not isinstance(identity, str) or not identity:
-                raise ValueError(f"Invalid ranked chunk identity: {run_path}")
-            hits.append(SearchHit(identity, 0.0, index, "replayed"))
+            if not isinstance(identity, str) or not identity or identity in seen_ids:
+                raise ValueError(f"Invalid or duplicate ranked chunk identity: {run_path}")
+            if (
+                type(item.get("rank")) is not int
+                or item["rank"] != index
+                or type(item.get("score")) not in (float, int)
+                or not math.isfinite(item["score"])
+            ):
+                raise ValueError(f"Invalid rank or nonfinite score in saved ranking: {run_path}")
+            seen_ids.add(identity)
+            hits.append(SearchHit(identity, float(item["score"]), index, "replayed"))
+        candidates = (
+            row.get("candidate_rankings_by_cutoff", {}).get(str(k))
+            if by_cutoff is not None
+            else row.get("candidate_rankings")
+        )
+        if candidates is not None:
+            candidate_ids = [item.get("chunk_id") for item in candidates]
+            if len(candidate_ids) != len(set(candidate_ids)) or not seen_ids.issubset(
+                set(candidate_ids)
+            ):
+                raise ValueError(
+                    f"Saved reranking contains missing, duplicate, or alien candidates: {run_path}"
+                )
         computed = evaluate_query(query, hits, {}, (k,))
         for name in keys:
             field = f"{name}@{k}"
