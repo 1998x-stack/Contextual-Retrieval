@@ -10,7 +10,7 @@ Reconstruct each part of Anthropic's Contextual Retrieval evaluation without con
 | 1 | Data + metrics | Validate corpus/queries/qrels; stable ID and legacy metrics tested |
 | 2 | Baselines | Vector, BM25, hybrid; per-query artifacts and CLI |
 | 3 | Contextualization | Chunk-specific prompt, original-context preservation, cache and usage; offline metadata control and E04–E06 wiring |
-| 4 | Reranking | Vector/contextual/vector+BM25 candidate parity, fixed-pool tests |
+| 4 | Reranking | Elasticsearch English BM25, Cohere adapter, E01–E10 matrix, fixed vs Cookbook candidate pools, CI ES integration |
 | 5 | Broad benchmark | Multiple models, corpora, statistical confidence intervals |
 | 6 | Agent Memory | Temporal-aware and session-aware queries and evidence validity |
 
