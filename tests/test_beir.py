@@ -107,3 +107,66 @@ def test_beir_official_count_check_is_invalid(beir_fixture):
 def test_beir_rejects_path_traversal_in_split(beir_fixture):
     with pytest.raises(ValueError, match="single filename"):
         paths(beir_fixture, split="../other")
+
+
+
+def test_scifact_downloader_verifies_archive_and_manifest(monkeypatch, tmp_path):
+    import hashlib
+    import io
+    import zipfile
+
+    import crlab.datasets.beir_download as source
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("scifact/corpus.jsonl", '{"_id":"d","text":"doc"}\n')
+        archive.writestr("scifact/queries.jsonl", '{"_id":"q","text":"query"}\n')
+        archive.writestr("scifact/qrels/test.tsv",
+                         "query-id\tcorpus-id\tscore\nq\td\t1\n")
+    data = buffer.getvalue()
+    monkeypatch.setattr(source, "OFFICIAL_SCIFACT_MD5", hashlib.md5(data).hexdigest())
+    monkeypatch.setattr(
+        source.urllib.request, "urlopen",
+        lambda *args, **kwargs: io.BytesIO(data),
+    )
+    result = source.download_scifact(tmp_path / "datasets")
+    assert result["label_granularity"] == "document"
+    assert result["archive_bytes"] == len(data)
+    output = tmp_path / "datasets" / "scifact"
+    assert (output / "source-manifest.json").exists()
+    assert load_dataset(*paths(output)).document_count == 1
+    with pytest.raises(FileExistsError):
+        source.download_scifact(tmp_path / "datasets")
+
+
+def test_scifact_downloader_rejects_wrong_archive_hash(monkeypatch, tmp_path):
+    import io
+    import crlab.datasets.beir_download as source
+
+    monkeypatch.setattr(
+        source.urllib.request, "urlopen",
+        lambda *args, **kwargs: io.BytesIO(b"not-a-real-zip"),
+    )
+    with pytest.raises(ValueError, match="checksum"):
+        source.download_scifact(tmp_path / "downloads")
+    assert not (tmp_path / "downloads" / "scifact").exists()
+
+
+def test_scifact_downloader_rejects_zip_path_traversal(monkeypatch, tmp_path):
+    import hashlib
+    import io
+    import zipfile
+    import crlab.datasets.beir_download as source
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("scifact/../escape.txt", "must not escape")
+    data = buffer.getvalue()
+    monkeypatch.setattr(source, "OFFICIAL_SCIFACT_MD5", hashlib.md5(data).hexdigest())
+    monkeypatch.setattr(
+        source.urllib.request, "urlopen",
+        lambda *args, **kwargs: io.BytesIO(data),
+    )
+    with pytest.raises(ValueError, match="Unsafe archive path"):
+        source.download_scifact(tmp_path / "downloads")
+    assert not (tmp_path / "downloads" / "scifact").exists()
