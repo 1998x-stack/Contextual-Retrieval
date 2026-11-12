@@ -21,6 +21,7 @@ from crlab.contextualization.artifacts import generate_context_bundle, load_cont
 from crlab.contextualization.engine import AnthropicContextualizer, MetadataContextualizer
 from crlab.datasets.anthropic import load_dataset
 from crlab.datasets.beir import load_dataset as load_beir_dataset, paths as beir_paths
+from crlab.datasets.beir_download import download_scifact
 from crlab.experiments.runner import file_hash, run, save_run
 from crlab.experiments.matrix import PHASE4_EXPERIMENTS, experiment_spec, plan_matrix
 
@@ -342,6 +343,9 @@ def main(argv: list[str] | None = None) -> None:
     download_parser = data_sub.add_parser("download")
     download_parser.add_argument("--out", type=Path, default=Path("data/raw/anthropic"))
     download_parser.add_argument("--force", action="store_true")
+    beir_download_parser = data_sub.add_parser("beir-download")
+    beir_download_parser.add_argument("--dataset", choices=["scifact"], default="scifact")
+    beir_download_parser.add_argument("--out", type=Path, default=Path("data/raw/beir"))
     validate_parser = data_sub.add_parser("validate")
     validate_parser.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
     validate_parser.add_argument("--expect-official", action="store_true")
@@ -441,6 +445,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.namespace == "data":
             if args.data_cmd == "download":
                 download(args.out, args.force)
+            elif args.data_cmd == "beir-download":
+                print(json.dumps(download_scifact(args.out), indent=2))
             else:
                 validate(args.data_dir, expect_official=args.expect_official,
                          dataset_format=args.dataset, beir_split=args.beir_split)
