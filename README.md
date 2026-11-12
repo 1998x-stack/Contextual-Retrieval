@@ -91,6 +91,25 @@ crlab eval run --experiment E08 --context-dir runs/claude-context \
   --allow-paid-api --out runs/e08-rerank
 ~~~
 
+Batch planning is safe by default and makes no API calls. It shows blockers before execution:
+
+~~~bash
+crlab matrix run --ids E01 E02 E03 E04 E05 E06 E07 E08 E09 E10 \
+  --context-dir runs/claude-context \
+  --rerank-model YOUR_COHERE_MODEL_ID \
+  --allow-paid-api --out-root runs/full-ablation
+# Add --execute only after reviewing the full plan, and with API keys set.
+~~~
+
+An executable offline two-experiment comparison is:
+
+~~~bash
+crlab matrix run --ids E02 E05 \
+  --context-dir runs/metadata-context \
+  --lexical-backend elasticsearch \
+  --out-root runs/phase4-offline --execute
+~~~
+
 See [Phase 4 design and reproduction table](docs/06-phase4.md).
 
 ## Core research contracts
