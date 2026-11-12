@@ -9,7 +9,7 @@ Reconstruct each part of Anthropic's Contextual Retrieval evaluation without con
 | 0 | Audit and provenance | Reference results sourced, version/algorithm deviations documented |
 | 1 | Data + metrics | Validate corpus/queries/qrels; stable ID and legacy metrics tested |
 | 2 | Baselines | Vector, BM25, hybrid; per-query artifacts and CLI |
-| 3 | Contextualization | Chunk-specific prompt, original-context preservation, cache and usage |
+| 3 | Contextualization | Chunk-specific prompt, original-context preservation, cache and usage; offline metadata control and E04–E06 wiring |
 | 4 | Reranking | Vector/contextual/vector+BM25 candidate parity, fixed-pool tests |
 | 5 | Broad benchmark | Multiple models, corpora, statistical confidence intervals |
 | 6 | Agent Memory | Temporal-aware and session-aware queries and evidence validity |

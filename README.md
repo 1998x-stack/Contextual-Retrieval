@@ -9,7 +9,8 @@ This repository distinguishes **official reference numbers**, **independent repr
 - Phase 0: official source registry, experiment audit, reference metrics.
 - Phase 1: Anthropic codebase corpus/evaluation adapter with stable IDs; ID-based and Cookbook-compatible metrics.
 - Phase 2: exact dot-product vector retrieval, local BM25, weighted rank fusion, CLI, JSONL ranking artifacts, deterministic tests.
-- Planned: API-driven contextual generation and prompt caching, Elasticsearch parity, Cohere reranking, cross-dataset evaluation, Agent Memory.
+- Phase 3: offline metadata control, official Claude contextualizer, prompt caching, resumable SQLite context cache, checksum-validated context bundles, E04–E06 retrieval integration.
+- Planned: Elasticsearch parity, Cohere reranking, cross-dataset evaluation, Agent Memory.
 
 ## Quickstart
 
@@ -28,11 +29,42 @@ The BM25 implementation in Phase 2 is **local Python BM25 with regex tokenizatio
 ~~~bash
 python -m pip install -e ".[dev,voyage]"
 export VOYAGE_API_KEY="your-key"
-crlab eval run --data-dir data/raw/anthropic --method vector --embedding-model voyage-2 --out runs/vector-voyage
-crlab eval run --data-dir data/raw/anthropic --method hybrid --embedding-model voyage-2 --out runs/hybrid-local
+crlab eval run --data-dir data/raw/anthropic --method vector --embedding-model voyage-2 --allow-paid-api --out runs/vector-voyage
+crlab eval run --data-dir data/raw/anthropic --method hybrid --embedding-model voyage-2 --allow-paid-api --out runs/hybrid-local
 ~~~
 
 By default no API key is loaded or sent by the repository. Do not commit credentials or generated proprietary data. Raw datasets are downloaded from a pinned Anthropic Cookbook commit (ce8b2629) and SHA-256 validated and are intentionally not vendored.
+
+## Phase 3: contextual retrieval
+
+**No API key required** for deterministic metadata control:
+
+~~~bash
+crlab context generate --provider metadata --data-dir data/raw/anthropic --out runs/metadata-context
+crlab context validate --data-dir data/raw/anthropic --context-dir runs/metadata-context
+crlab eval run --data-dir data/raw/anthropic --method bm25 --context-dir runs/metadata-context --out runs/e05-metadata-local
+~~~
+
+For real Claude context generation (billable), install `.[anthropic]`, supply your own model ID, API key and explicit permission:
+
+~~~bash
+python -m pip install -e ".[anthropic]"
+export ANTHROPIC_API_KEY="your-key"
+crlab context generate --provider anthropic --model YOUR_AVAILABLE_CLAUDE_MODEL_ID --allow-paid-api --out runs/claude-context
+crlab context validate --context-dir runs/claude-context
+~~~
+
+To run contextual vector/hybrid (additional Voyage API charges):
+
+~~~bash
+crlab eval run --method vector --context-dir runs/claude-context --embedding-model voyage-2 --allow-paid-api --out runs/e04-context-vector
+crlab eval run --method bm25 --context-dir runs/claude-context --out runs/e05-context-bm25-local
+crlab eval run --method hybrid --context-dir runs/claude-context --embedding-model voyage-2 --allow-paid-api --out runs/e06-context-hybrid-local
+~~~
+
+`runs/` and `data/cache/` are gitignored. Context source manifests include SHA-256 hashes of original corpus, evaluation, complete context records, plus charged API token usage. A repeated generation with the same cache key makes no new model calls, but creates a new auditable bundle. E05/E06 local-BM25 results are **not** identical to Elasticsearch BM25 from the Cookbook.
+
+See [Phase 3 design](docs/05-contextualization-engine.md) for data provenance, cache invalidation and limitations.
 
 ## Core research contracts
 
@@ -52,6 +84,7 @@ By default no API key is loaded or sent by the repository. Do not commit credent
 - [Data contracts](docs/02-data-contracts.md)
 - [Evaluation protocol](docs/03-evaluation-protocol.md)
 - [Experiment matrix](docs/04-experiment-matrix.md)
+- [Contextualization engine](docs/05-contextualization-engine.md)
 
 ## Provenance
 

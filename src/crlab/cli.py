@@ -10,6 +10,8 @@ import urllib.request
 from pathlib import Path
 
 from crlab import __version__
+from crlab.contextualization.artifacts import generate_context_bundle, load_context_bundle
+from crlab.contextualization.engine import AnthropicContextualizer, MetadataContextualizer
 from crlab.datasets.anthropic import load_dataset
 from crlab.experiments.runner import file_hash, run, save_run
 
@@ -86,6 +88,14 @@ def validate(data_dir: Path, *, expect_official: bool = False) -> None:
 def evaluate(args: argparse.Namespace) -> None:
     corpus, eval_file = _files(Path(args.data_dir))
     dataset = load_dataset(corpus, eval_file)
+    contexts = None
+    context_manifest = None
+    if args.context_dir is not None:
+        bundle = load_context_bundle(
+            args.context_dir, dataset, corpus_path=corpus, evaluation_path=eval_file
+        )
+        contexts = bundle.contexts
+        context_manifest = bundle.manifest
     embedder = None
     if args.method in {"vector", "hybrid"}:
         if not args.allow_paid_api:
@@ -106,6 +116,7 @@ def evaluate(args: argparse.Namespace) -> None:
         candidate_pool=args.candidate_pool,
         semantic_weight=weights[0],
         bm25_weight=weights[1],
+        context_by_id=contexts,
     )
     save_run(
         args.out,
@@ -117,8 +128,44 @@ def evaluate(args: argparse.Namespace) -> None:
         model_name=args.embedding_model if embedder else None,
         candidate_pool=args.candidate_pool,
         weights=weights,
+        context_manifest=context_manifest,
     )
     print(json.dumps({"out": args.out, "metrics": scores}, indent=2))
+
+
+def context_generate(args: argparse.Namespace) -> None:
+    corpus, eval_file = _files(Path(args.data_dir))
+    if args.provider == "anthropic":
+        if not args.allow_paid_api:
+            raise RuntimeError("Anthropic generation is billable: add --allow-paid-api")
+        if not args.model:
+            raise ValueError("--model is required for Anthropic contextualization")
+        provider = AnthropicContextualizer(
+            args.model,
+            max_output_tokens=args.max_output_tokens,
+            cache_enabled=not args.no_prompt_cache,
+        )
+    else:
+        provider = MetadataContextualizer()
+    manifest = generate_context_bundle(
+        corpus, eval_file, args.out, provider, cache_path=args.cache_path
+    )
+    print(json.dumps({"out": str(args.out), "manifest": manifest}, indent=2))
+
+
+def context_validate(args: argparse.Namespace) -> None:
+    corpus, eval_file = _files(Path(args.data_dir))
+    dataset = load_dataset(corpus, eval_file)
+    bundle = load_context_bundle(
+        args.context_dir, dataset, corpus_path=corpus, evaluation_path=eval_file
+    )
+    print(json.dumps({
+        "status": "valid", "contexts": len(bundle.contexts),
+        "strategy": bundle.manifest["strategy"],
+        "model": bundle.manifest["model"],
+        "cache_hits": bundle.manifest["cache_hits"],
+        "cache_misses": bundle.manifest["cache_misses"],
+    }, indent=2))
 
 
 def compare(paths: list[Path]) -> None:
@@ -146,6 +193,21 @@ def main(argv: list[str] | None = None) -> None:
     validate_parser.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
     validate_parser.add_argument("--expect-official", action="store_true")
 
+    context = subs.add_parser("context", help="Generate or validate chunk contexts")
+    context_sub = context.add_subparsers(dest="context_cmd", required=True)
+    generate_parser = context_sub.add_parser("generate")
+    generate_parser.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
+    generate_parser.add_argument("--out", type=Path, required=True)
+    generate_parser.add_argument("--provider", choices=["metadata", "anthropic"], default="metadata")
+    generate_parser.add_argument("--model", default=None)
+    generate_parser.add_argument("--cache-path", type=Path, default=Path("data/cache/contexts.sqlite3"))
+    generate_parser.add_argument("--max-output-tokens", type=int, default=2048)
+    generate_parser.add_argument("--no-prompt-cache", action="store_true")
+    generate_parser.add_argument("--allow-paid-api", action="store_true")
+    context_validate_parser = context_sub.add_parser("validate")
+    context_validate_parser.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
+    context_validate_parser.add_argument("--context-dir", type=Path, required=True)
+
     evaluation = subs.add_parser("eval", help="Run benchmark methods")
     eval_sub = evaluation.add_subparsers(dest="eval_cmd", required=True)
     run_parser = eval_sub.add_parser("run")
@@ -153,6 +215,7 @@ def main(argv: list[str] | None = None) -> None:
     run_parser.add_argument("--method", choices=["bm25", "vector", "hybrid"], required=True)
     run_parser.add_argument("--out", required=True)
     run_parser.add_argument("--embedding-model", default="voyage-2")
+    run_parser.add_argument("--context-dir", type=Path, default=None)
     run_parser.add_argument("--embedding-cache", default="data/cache/embeddings.json")
     run_parser.add_argument("--allow-paid-api", action="store_true")
     run_parser.add_argument("--candidate-pool", type=int, default=150)
@@ -171,6 +234,11 @@ def main(argv: list[str] | None = None) -> None:
                 download(args.out, args.force)
             else:
                 validate(args.data_dir, expect_official=args.expect_official)
+        elif args.namespace == "context":
+            if args.context_cmd == "generate":
+                context_generate(args)
+            else:
+                context_validate(args)
         elif args.namespace == "eval":
             evaluate(args)
         else:

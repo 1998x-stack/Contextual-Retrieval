@@ -18,3 +18,7 @@ E02/E03 currently use local BM25 and do NOT match official Elasticsearch semanti
 Every row must report Pass@5/10/20, ID Recall@5/10/20, latency, model versions, index creation cost and query cost when available.
 
 Planned cross-dataset matrix: SciFact, NFCorpus, FiQA, selected chunk-labeled codebase QA, and long-term trajectory Qrels. Document-level qrels must remain document-level.
+
+## Phase 3 execution
+
+E04/E05/E06 are implemented as `crlab eval run --method vector|bm25|hybrid --context-dir <bundle>`. The bundle `strategy` and model are persisted in run manifests. E04 and E06 need opt-in Voyage API calls, whereas E05 is available offline. `--provider metadata` is a deterministic control, not a surrogate for the Claude contextualization results. The local BM25 analyzer still differs from Elasticsearch; a strict Appendix II / Cookbook score match is not claimed.

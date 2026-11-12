@@ -32,3 +32,23 @@ jobs:
         with:
           name: official-local-bm25-results
           path: runs/official-local-bm25/
+
+  metadata-context-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: crlab data download --out data/raw/anthropic
+      - run: crlab context generate --provider metadata --data-dir data/raw/anthropic --out runs/metadata-context
+      - run: crlab context validate --data-dir data/raw/anthropic --context-dir runs/metadata-context
+      - run: crlab eval run --data-dir data/raw/anthropic --method bm25 --context-dir runs/metadata-context --out runs/metadata-bm25
+      - uses: actions/upload-artifact@v4
+        with:
+          name: metadata-context-smoke-results
+          path: |
+            runs/metadata-context/manifest.json
+            runs/metadata-bm25/manifest.json
+            runs/metadata-bm25/metrics.json
