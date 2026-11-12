@@ -158,9 +158,9 @@ def test_mismatch_golden_labels_is_rejected(synthetic_runs):
     rows = [json.loads(line) for line in rows_path.read_text().splitlines()]
     rows[0]["gold_chunk_ids"] = ["incorrect"]
     rows_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
-    with pytest.raises(IncompatibleRuns, match="Golden"):
-        compare_runs(load_run(left), load_run(right), metric="recall@1",
-                     resamples=100, permutations=100)
+    # The stronger loader now rejects the contradiction even before pair matching.
+    with pytest.raises(ValueError, match="Ranking and ID metric disagree"):
+        load_run(right)
 
 
 def test_tampered_aggregate_is_rejected(synthetic_runs):
@@ -289,3 +289,15 @@ def test_tampered_query_ranking_is_detected_even_if_scores_look_consistent(synth
     ranking_file.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
     with pytest.raises(ValueError, match="Ranking and ID metric disagree"):
         load_run(left)
+
+
+
+def test_pairing_rejects_changed_query_text_even_with_valid_scores(synthetic_runs):
+    left, right, _ = synthetic_runs
+    location = right / "per_query.jsonl"
+    rows = [json.loads(line) for line in location.read_text().splitlines()]
+    rows[0]["query"] = "Question modified after benchmark"
+    location.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    with pytest.raises(IncompatibleRuns, match="Query text"):
+        compare_runs(load_run(left), load_run(right), metric="recall@1",
+                     resamples=100, permutations=100)
