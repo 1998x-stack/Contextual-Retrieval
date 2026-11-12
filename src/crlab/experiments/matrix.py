@@ -51,6 +51,7 @@ def plan_matrix(
     es_url: str = "http://localhost:9200",
     es_recreate_index: bool = False,
     embedding_model: str = "voyage-2",
+    embedding_input_mode: str = "legacy",
     rerank_model: str | None = None,
     rerank_mode: str = "fixed",
     allow_paid_api: bool = False,
@@ -71,6 +72,8 @@ def plan_matrix(
         raise ValueError("Elasticsearch namespace must match crlab_[a-z0-9_-]+")
     if dataset_format not in {"anthropic", "beir"}:
         raise ValueError("Unsupported dataset format")
+    if embedding_input_mode not in {"legacy", "asymmetric"}:
+        raise ValueError("Unknown embedding input mode")
     if lexical_backend not in {"local", "elasticsearch"}:
         raise ValueError("lexical_backend must be local or elasticsearch")
     if rerank_mode not in {"fixed", "cookbook"}:
@@ -104,6 +107,7 @@ def plan_matrix(
             "--data-dir", data_dir,
             "--out", str(destination),
             "--embedding-model", embedding_model,
+            "--embedding-input-mode", embedding_input_mode,
             "--dataset", dataset_format,
         ]
         if dataset_format == "beir":
@@ -145,6 +149,7 @@ def plan_model_sweep(
     es_url: str = "http://localhost:9200",
     rerank_model: str | None = None,
     rerank_mode: str = "fixed",
+    embedding_input_mode: str = "legacy",
     allow_paid_api: bool = False,
     dataset_format: str = "anthropic",
     beir_split: str = "test",
@@ -179,6 +184,7 @@ def plan_model_sweep(
             lexical_backend=lexical_backend,
             es_url=es_url,
             embedding_model=model,
+            embedding_input_mode=embedding_input_mode,
             rerank_model=rerank_model,
             rerank_mode=rerank_mode,
             allow_paid_api=allow_paid_api,

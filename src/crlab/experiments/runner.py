@@ -221,6 +221,7 @@ def save_run(
     corpus_path: str | Path,
     evaluation_path: str | Path,
     model_name: str | None = None,
+    embedding_input_mode: str = "legacy",
     candidate_pool: int = 150,
     weights: tuple[float, float] = (0.8, 0.2),
     context_manifest: dict | None = None,
@@ -243,6 +244,7 @@ def save_run(
         "experiment_id": experiment_id,
         "method": method,
         "vector_model": model_name,
+        "embedding_input_mode": embedding_input_mode if model_name else None,
         "lexical_engine": (
             "local_python_bm25" if lexical_backend == "local" else "elasticsearch_bm25"
         ) if method != "vector" else None,

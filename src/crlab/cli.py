@@ -172,6 +172,12 @@ def evaluate(args: argparse.Namespace) -> None:
         embedder = VoyageEmbedder(
             model=args.embedding_model,
             cache_path=args.embedding_cache,
+            document_input_type=(
+                "document" if args.embedding_input_mode == "asymmetric" else None
+            ),
+            query_input_type=(
+                "query" if args.embedding_input_mode == "asymmetric" else None
+            ),
         )
     weights = (args.semantic_weight, args.bm25_weight)
     scores, rows = run(
@@ -197,6 +203,7 @@ def evaluate(args: argparse.Namespace) -> None:
         corpus_path=corpus,
         evaluation_path=eval_file,
         model_name=args.embedding_model if embedder else None,
+        embedding_input_mode=args.embedding_input_mode,
         candidate_pool=args.candidate_pool,
         weights=weights,
         context_manifest=context_manifest,
@@ -265,6 +272,7 @@ def run_matrix(args: argparse.Namespace) -> None:
         es_url=args.es_url,
         es_recreate_index=args.es_recreate_index,
         embedding_model=args.embedding_model,
+        embedding_input_mode=args.embedding_input_mode,
         rerank_model=args.rerank_model,
         rerank_mode=args.rerank_mode,
         allow_paid_api=args.allow_paid_api,
@@ -293,6 +301,7 @@ def run_model_sweep(args: argparse.Namespace) -> None:
         context_dir=str(args.context_dir) if args.context_dir else None,
         lexical_backend=args.lexical_backend, es_url=args.es_url,
         rerank_model=args.rerank_model, rerank_mode=args.rerank_mode,
+        embedding_input_mode=args.embedding_input_mode,
         allow_paid_api=args.allow_paid_api,
         dataset_format=args.dataset, beir_split=args.beir_split,
     )
@@ -406,6 +415,7 @@ def main(argv: list[str] | None = None) -> None:
     run_parser.add_argument("--experiment", choices=sorted(PHASE4_EXPERIMENTS))
     run_parser.add_argument("--out", required=True)
     run_parser.add_argument("--embedding-model", default="voyage-2")
+    run_parser.add_argument("--embedding-input-mode", choices=["legacy", "asymmetric"], default="legacy")
     run_parser.add_argument("--context-dir", type=Path, default=None)
     run_parser.add_argument("--embedding-cache", default="data/cache/embeddings.json")
     run_parser.add_argument("--allow-paid-api", action="store_true")
@@ -437,6 +447,7 @@ def main(argv: list[str] | None = None) -> None:
     matrix_run.add_argument("--es-url", default="http://localhost:9200")
     matrix_run.add_argument("--es-recreate-index", action="store_true")
     matrix_run.add_argument("--embedding-model", default="voyage-2")
+    matrix_run.add_argument("--embedding-input-mode", choices=["legacy", "asymmetric"], default="legacy")
     matrix_run.add_argument("--rerank-model", default=None)
     matrix_run.add_argument("--rerank-mode", choices=["fixed", "cookbook"], default="fixed")
     matrix_run.add_argument("--allow-paid-api", action="store_true")
@@ -446,6 +457,7 @@ def main(argv: list[str] | None = None) -> None:
         "sweep", help="Plan isolated multi-embedding-model experiments; --execute to run"
     )
     sweep.add_argument("--models", nargs="+", required=True)
+    sweep.add_argument("--embedding-input-mode", choices=["legacy", "asymmetric"], default="legacy")
     sweep.add_argument("--ids", nargs="+", choices=sorted(PHASE4_EXPERIMENTS),
                        default=["E01", "E03"])
     sweep.add_argument("--data-dir", type=Path, default=Path("data/raw/anthropic"))
