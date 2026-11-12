@@ -71,6 +71,7 @@ class Contextualizer(Protocol):
     prompt_version: str
     max_output_tokens: int
     cache_enabled: bool
+    prompt_fingerprint: str
 
     def generate(self, document: str, chunk: Chunk) -> ContextResult: ...
 
@@ -83,6 +84,7 @@ class MetadataContextualizer:
     prompt_version = "metadata-v1"
     max_output_tokens = 0
     cache_enabled = False
+    prompt_fingerprint = sha256_text("metadata:source_id|document_uuid|chunk_index:v1")
 
     def generate(self, document: str, chunk: Chunk) -> ContextResult:
         del document
@@ -105,6 +107,9 @@ class AnthropicContextualizer:
 
     strategy = "anthropic"
     prompt_version = PROMPT_VERSION
+    prompt_fingerprint = sha256_text(
+        DOCUMENT_CONTEXT_PROMPT + "\x00" + CHUNK_CONTEXT_PROMPT
+    )
 
     def __init__(
         self,

@@ -51,9 +51,13 @@ def plan_matrix(
     es_url: str = "http://localhost:9200",
     es_recreate_index: bool = False,
     embedding_model: str = "voyage-2",
+    embedding_input_mode: str = "legacy",
     rerank_model: str | None = None,
     rerank_mode: str = "fixed",
     allow_paid_api: bool = False,
+    index_namespace: str = "crlab_phase4",
+    dataset_format: str = "anthropic",
+    beir_split: str = "test",
 ) -> list[dict]:
     """Make a safe, explicit command plan without running any models.
 
@@ -61,8 +65,15 @@ def plan_matrix(
     *before* any external API or Elasticsearch indexing side effect.
     """
     from pathlib import Path
+    import re
     import sys
 
+    if not re.fullmatch(r"crlab_[a-z0-9_-]{1,80}", index_namespace):
+        raise ValueError("Elasticsearch namespace must match crlab_[a-z0-9_-]+")
+    if dataset_format not in {"anthropic", "beir"}:
+        raise ValueError("Unsupported dataset format")
+    if embedding_input_mode not in {"legacy", "asymmetric"}:
+        raise ValueError("Unknown embedding input mode")
     if lexical_backend not in {"local", "elasticsearch"}:
         raise ValueError("lexical_backend must be local or elasticsearch")
     if rerank_mode not in {"fixed", "cookbook"}:
@@ -75,6 +86,8 @@ def plan_matrix(
     for item in experiment_ids:
         spec = experiment_spec(item)
         blockers: list[str] = []
+        if dataset_format == "beir" and spec.use_context:
+            blockers.append("BEIR has document-level Qrels; contextual Chunk experiments are unavailable")
         if spec.use_context and not context_dir:
             blockers.append("missing --context-dir")
         if spec.rerank and not rerank_model:
@@ -94,7 +107,11 @@ def plan_matrix(
             "--data-dir", data_dir,
             "--out", str(destination),
             "--embedding-model", embedding_model,
+            "--embedding-input-mode", embedding_input_mode,
+            "--dataset", dataset_format,
         ]
+        if dataset_format == "beir":
+            command.extend(["--beir-split", beir_split])
         if spec.use_context and context_dir:
             command.extend(["--context-dir", context_dir])
         if spec.method in {"bm25", "hybrid"}:
@@ -102,7 +119,7 @@ def plan_matrix(
             if lexical_backend == "elasticsearch":
                 command.extend([
                     "--es-url", es_url,
-                    "--es-index", f"crlab_phase4_{spec.experiment_id.lower()}",
+                    "--es-index", f"{index_namespace}_{spec.experiment_id.lower()}",
                 ])
                 if es_recreate_index:
                     command.append("--es-recreate-index")
@@ -118,3 +135,67 @@ def plan_matrix(
             "command": command,
         })
     return plans
+
+
+
+def plan_model_sweep(
+    models: list[str],
+    experiment_ids: list[str],
+    *,
+    out_root: str,
+    data_dir: str,
+    context_dir: str | None = None,
+    lexical_backend: str = "elasticsearch",
+    es_url: str = "http://localhost:9200",
+    rerank_model: str | None = None,
+    rerank_mode: str = "fixed",
+    embedding_input_mode: str = "legacy",
+    allow_paid_api: bool = False,
+    dataset_format: str = "anthropic",
+    beir_split: str = "test",
+) -> list[dict]:
+    """One fully isolated run namespace per Embedding model (dry run only).
+
+    API credentials are never resolved here; execution is performed by CLI
+    after global preflight and requires --allow-paid-api plus --execute.
+    """
+    import hashlib
+    import re
+    from pathlib import Path
+
+    if not models or len(set(models)) != len(models):
+        raise ValueError("Provide distinct nonempty embedding model IDs")
+    if any(not name.strip() for name in models):
+        raise ValueError("Empty embedding model ID")
+    if not experiment_ids or all(
+        experiment_spec(item).method == "bm25" for item in experiment_ids
+    ):
+        raise ValueError("Model sweep requires vector or hybrid experiments")
+    results: list[dict] = []
+    for model in models:
+        safe = re.sub(r"[^a-z0-9_-]+", "-", model.lower()).strip("-")[:36] or "model"
+        suffix = hashlib.sha256(model.encode("utf-8")).hexdigest()[:12]
+        label = f"{safe}-{suffix}"
+        plans = plan_matrix(
+            experiment_ids,
+            data_dir=data_dir,
+            out_root=str(Path(out_root) / label),
+            context_dir=context_dir,
+            lexical_backend=lexical_backend,
+            es_url=es_url,
+            embedding_model=model,
+            embedding_input_mode=embedding_input_mode,
+            rerank_model=rerank_model,
+            rerank_mode=rerank_mode,
+            allow_paid_api=allow_paid_api,
+            dataset_format=dataset_format,
+            beir_split=beir_split,
+            index_namespace=f"crlab_sweep_{safe}_{suffix}",
+        )
+        results.append({
+            "model": model,
+            "run_namespace": label,
+            "status": "ready" if all(p["status"] == "ready" for p in plans) else "blocked",
+            "experiments": plans,
+        })
+    return results

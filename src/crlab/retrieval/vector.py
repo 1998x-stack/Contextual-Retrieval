@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Sequence
 
 from crlab.schemas import Chunk, SearchHit
@@ -10,7 +11,14 @@ from crlab.schemas import Chunk, SearchHit
 def dot_product(left: Sequence[float], right: Sequence[float]) -> float:
     if len(left) != len(right) or not left:
         raise ValueError("Vectors must have the same nonzero dimensionality")
-    return float(sum(a * b for a, b in zip(left, right, strict=True)))
+    if any(not math.isfinite(value) for value in left) or any(
+        not math.isfinite(value) for value in right
+    ):
+        raise ValueError("Embedding values must be finite")
+    result = float(sum(a * b for a, b in zip(left, right, strict=True)))
+    if not math.isfinite(result):
+        raise ValueError("Dot product overflowed to a nonfinite score")
+    return result
 
 
 class ExactVector:
@@ -25,6 +33,8 @@ class ExactVector:
         dim = len(embeddings[0])
         if not dim or any(len(vector) != dim for vector in embeddings):
             raise ValueError("Inconsistent embedding dimensions")
+        if any(not math.isfinite(value) for vector in embeddings for value in vector):
+            raise ValueError("Embedding values must be finite")
         self.chunks = tuple(chunks)
         self.embeddings = tuple(tuple(x) for x in embeddings)
         self.embed_query = embed_query

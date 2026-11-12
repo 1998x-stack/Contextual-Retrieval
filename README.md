@@ -11,7 +11,8 @@ This repository distinguishes **official reference numbers**, **independent repr
 - Phase 2: exact dot-product vector retrieval, local BM25, weighted rank fusion, CLI, JSONL ranking artifacts, deterministic tests.
 - Phase 3: offline metadata control, official Claude contextualizer, prompt caching, resumable SQLite context cache, checksum-validated context bundles, E04–E06 retrieval integration.
 - Phase 4: Elasticsearch English-analyzer BM25, Cohere rerank adapter, E01–E10 registry, and fixed-pool versus Cookbook rerank evaluation.
-- Planned: cross-dataset evaluation, statistical significance, Agent Memory.
+- Phase 5: strict executed-run validation, paired/cluster bootstrap, paired sign-flip tests, Holm-adjusted ablations, query failure analysis, dataset-safe leaderboards, cost Pareto.
+- Planned: expanded document-level/Chunk-level cross-domain datasets and Agent Memory.
 
 ## Quickstart
 
@@ -112,6 +113,89 @@ crlab matrix run --ids E02 E05 \
 
 See [Phase 4 design and reproduction table](docs/06-phase4.md).
 
+## Phase 5: Statistical Benchmark Analysis
+
+Analyze executed artifacts offline, without model credentials or external API calls:
+
+~~~bash
+crlab report paired \
+  --baseline runs/e02-elasticsearch \
+  --candidate runs/e05-elasticsearch \
+  --metric recall@20 \
+  --resamples 2000 --permutations 5000 --seed 42 \
+  --out reports/generated/e02-vs-e05
+
+crlab report batch \
+  --baseline runs/e02-elasticsearch \
+  --candidates runs/e05-elasticsearch runs/other-executed-method \
+  --metric recall@20 --out reports/generated/ablations
+
+crlab report leaderboard \
+  --runs runs/e02-elasticsearch runs/e05-elasticsearch \
+  --metric recall@20 --out reports/generated/leaderboard
+~~~
+
+Reports include query-level delta JSONL and CSV, seeded 95% paired-bootstrap intervals, two-sided sign-flip p-values, and Holm correction for multi-run families. Comparisons refuse source dataset/Qrels/query-text mismatch. Optional human-supplied query category and cluster labels are supported with --query-labels (see docs/07-phase5.md); untagged queries remain explicitly unlabeled.
+
+Cost–quality Pareto requires an externally prepared, *complete* cost ledger. Unknown total costs are never silently treated as zero:
+
+~~~bash
+crlab report pareto \
+  --runs runs/e02-elasticsearch runs/e05-elasticsearch \
+  --metric recall@20 \
+  --costs costs/verified-total-costs.json \
+  --out reports/generated/pareto
+~~~
+
+**Cross-model comparison**: plan separate model IDs with isolated output/index namespaces, opt in to paid calls only after review, then compare the executed run artifacts:
+
+~~~bash
+crlab matrix sweep --models YOUR_AVAILABLE_EMBEDDING_A YOUR_AVAILABLE_EMBEDDING_B \
+  --ids E01 E03 --out-root runs/model-sweep --lexical-backend elasticsearch
+# Dry-run only. To execute, configure VOYAGE_API_KEY and append:
+# --allow-paid-api --execute
+~~~
+
+Use the report leaderboard, paired or batch commands on the independently executed model runs. The statistical layer does not generate paid model outputs itself. Different datasets appear in separate leaderboard groups; do not interpret raw scores across corpora as directly comparable.
+
+See docs/07-phase5.md for method assumptions, billing-ledger contract, failure analysis, interpretation and extension plan.
+
+## BEIR SciFact: independent cross-domain document retrieval
+
+The verified SciFact download is fixed to the BEIR publisher checksum. It indexes **one whole document as one retrieval unit**, because BEIR test Qrels are document-level, not Chunk-level:
+
+~~~bash
+crlab data beir-download --dataset scifact --out data/raw/beir
+crlab data validate --dataset beir --data-dir data/raw/beir/scifact
+crlab eval run --dataset beir --experiment E02 \
+  --data-dir data/raw/beir/scifact --out runs/beir-scifact-e02
+crlab report leaderboard --runs runs/beir-scifact-e02 \
+  --metric recall@20 --out reports/generated/beir-scifact
+~~~
+
+Actual executed data: 5,183 scientific documents and 300 test Queries; local BM25 document Recall@20 83.2556%, binary NDCG@20 67.2736%. This is a separate **BEIR extension benchmark**; it must not be compared directly against the Anthropic 737-Chunk Corpus, nor mistaken for standard graded BEIR NDCG.
+
+See docs/08-beir-scifact.md and reports/baselines/phase5-scifact-local-bm25.md.
+
+## Reviewed integration safeguards
+
+The PR #1–#4 review and merge checklist is recorded in [docs/09-review-and-merge.md](docs/09-review-and-merge.md). The integrated branch additionally verifies prompt fingerprints, official SciFact SHA-256, provider output/reranker candidate IDs and immutable atomic artifact publication.
+
+For modern Embedding models that support asymmetric query/document embedding, opt in explicitly:
+
+~~~bash
+crlab eval run --experiment E01 \
+  --embedding-model YOUR_AVAILABLE_MODEL \
+  --embedding-input-mode asymmetric --allow-paid-api \
+  --out runs/modern-embedding
+
+# Default is legacy (no input_type); matrix plans and sweeps preserve the flag:
+crlab matrix sweep --models MODEL_A MODEL_B \
+  --ids E01 E03 --embedding-input-mode asymmetric
+~~~
+
+This changes the model's retrieval semantics; do not compare it to a legacy experiment as though only the model ID changed. Full experimental outputs remain segregated from the historical baseline.
+
 ## Core research contracts
 
 - The original 90-document/737-chunk/248-query figures are **reference metadata**, validated against downloaded files at execution time.
@@ -132,6 +216,8 @@ See [Phase 4 design and reproduction table](docs/06-phase4.md).
 - [Experiment matrix](docs/04-experiment-matrix.md)
 - [Contextualization engine](docs/05-contextualization-engine.md)
 - [Phase 4: BM25 and reranking](docs/06-phase4.md)
+- [Phase 5: Benchmark Statistics](docs/07-phase5.md)
+- [BEIR SciFact extension](docs/08-beir-scifact.md)
 
 ## Provenance
 

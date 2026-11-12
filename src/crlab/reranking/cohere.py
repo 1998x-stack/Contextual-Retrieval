@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Mapping, Sequence
 from typing import Protocol
@@ -81,13 +82,18 @@ class CohereReranker:
         used: set[int] = set()
         scored: list[SearchHit] = []
         for rank, item in enumerate(returned, 1):
-            index = int(item.index)
+            if type(item.index) is not int:
+                raise ValueError("Reranker candidate index must be an integer")
+            index = item.index
+            relevance_score = float(item.relevance_score)
+            if not math.isfinite(relevance_score):
+                raise ValueError("Reranker relevance score must be finite")
             if index < 0 or index >= len(candidates) or index in used:
                 raise ValueError(f"Reranker returned invalid candidate index {index}")
             used.add(index)
             scored.append(SearchHit(
                 chunk_id=candidates[index].chunk_id,
-                score=float(item.relevance_score),
+                score=relevance_score,
                 rank=rank,
                 source="cohere_rerank",
             ))

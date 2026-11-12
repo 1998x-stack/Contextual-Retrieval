@@ -80,9 +80,35 @@ jobs:
       - run: crlab eval run --experiment E02 --lexical-backend elasticsearch --es-index crlab_official_e02 --out runs/e02-elasticsearch
       - run: crlab context generate --provider metadata --out runs/metadata-context
       - run: crlab eval run --experiment E05 --context-dir runs/metadata-context --lexical-backend elasticsearch --es-index crlab_metadata_e05 --out runs/e05-elasticsearch
+      - run: crlab report paired --baseline runs/e02-elasticsearch --candidate runs/e05-elasticsearch --metric recall@20 --resamples 600 --permutations 600 --out reports/generated/es-paired
+      - run: crlab report batch --baseline runs/e02-elasticsearch --candidates runs/e05-elasticsearch --metric recall@20 --resamples 600 --permutations 600 --out reports/generated/es-batch
+      - run: crlab report leaderboard --runs runs/e02-elasticsearch runs/e05-elasticsearch --metric recall@20 --out reports/generated/es-leaderboard
       - uses: actions/upload-artifact@v4
         with:
           name: phase4-es-bm25-results
           path: |
             runs/e02-elasticsearch/
             runs/e05-elasticsearch/
+            reports/generated/es-paired/
+            reports/generated/es-batch/
+            reports/generated/es-leaderboard/
+
+  beir-scifact-document:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: crlab data beir-download --dataset scifact --out data/raw/beir
+      - run: crlab data validate --dataset beir --data-dir data/raw/beir/scifact
+      - run: crlab eval run --dataset beir --experiment E02 --data-dir data/raw/beir/scifact --out runs/beir-scifact-e02
+      - run: crlab report leaderboard --runs runs/beir-scifact-e02 --metric recall@20 --out reports/generated/beir-scifact
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase5-beir-scifact-document-results
+          path: |
+            data/raw/beir/scifact/source-manifest.json
+            runs/beir-scifact-e02/
+            reports/generated/beir-scifact/

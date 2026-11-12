@@ -1,0 +1,15 @@
+{
+  "note": "ILLUSTRATIVE ONLY. Replace with real per-run total workload billing; source required.",
+  "runs": [
+    {
+      "path": "runs/e03",
+      "cost_usd": null,
+      "source": "REPLACE_WITH_BILLING_EVIDENCE"
+    },
+    {
+      "path": "runs/e06",
+      "cost_usd": null,
+      "source": "REPLACE_WITH_BILLING_EVIDENCE"
+    }
+  ]
+}

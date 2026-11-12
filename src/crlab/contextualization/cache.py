@@ -20,6 +20,9 @@ def context_cache_key(contextualizer: Contextualizer, document: str, chunk: Chun
         "model": contextualizer.model,
         "strategy": contextualizer.strategy,
         "prompt_version": contextualizer.prompt_version,
+        "prompt_fingerprint": getattr(
+            contextualizer, "prompt_fingerprint", contextualizer.prompt_version
+        ),
         "max_output_tokens": contextualizer.max_output_tokens,
         "prompt_cache": contextualizer.cache_enabled,
         "document_uuid": chunk.document_id,
