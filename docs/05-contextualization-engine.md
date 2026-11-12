@@ -80,7 +80,7 @@ A loader rejects corrupted checksums, duplicate/unknown IDs, missing chunks, sta
 
 ## Cache policy and billing
 
-- Local cache keys include document/Chunk text, identity, provider model, strategy, prompt version, max output tokens and cache-control setting.
+- Local cache keys include document/Chunk text, identity, provider model, strategy, prompt version, the SHA-256 fingerprint of actual Prompt text, max output tokens and cache-control setting.
 - A failed run retains the already generated cache entries in SQLite; re-run with a new output directory.
 - Only cache misses contribute to billed_api_usage in the generated manifest.
 - Token usage is provided in raw units, not historical dollar pricing. Provider output variability may prevent byte-identical regeneration across runs.

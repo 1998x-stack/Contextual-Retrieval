@@ -177,6 +177,25 @@ Actual executed data: 5,183 scientific documents and 300 test Queries; local BM2
 
 See docs/08-beir-scifact.md and reports/baselines/phase5-scifact-local-bm25.md.
 
+## Reviewed integration safeguards
+
+The PR #1–#4 review and merge checklist is recorded in [docs/09-review-and-merge.md](docs/09-review-and-merge.md). The integrated branch additionally verifies prompt fingerprints, official SciFact SHA-256, provider output/reranker candidate IDs and immutable atomic artifact publication.
+
+For modern Embedding models that support asymmetric query/document embedding, opt in explicitly:
+
+~~~bash
+crlab eval run --experiment E01 \
+  --embedding-model YOUR_AVAILABLE_MODEL \
+  --embedding-input-mode asymmetric --allow-paid-api \
+  --out runs/modern-embedding
+
+# Default is legacy (no input_type); matrix plans and sweeps preserve the flag:
+crlab matrix sweep --models MODEL_A MODEL_B \
+  --ids E01 E03 --embedding-input-mode asymmetric
+~~~
+
+This changes the model's retrieval semantics; do not compare it to a legacy experiment as though only the model ID changed. Full experimental outputs remain segregated from the historical baseline.
+
 ## Core research contracts
 
 - The original 90-document/737-chunk/248-query figures are **reference metadata**, validated against downloaded files at execution time.
