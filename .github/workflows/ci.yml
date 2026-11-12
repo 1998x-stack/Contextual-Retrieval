@@ -52,3 +52,37 @@ jobs:
             runs/metadata-context/manifest.json
             runs/metadata-bm25/manifest.json
             runs/metadata-bm25/metrics.json
+
+  elasticsearch-parity:
+    runs-on: ubuntu-latest
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.15.5
+        ports:
+          - 9200:9200
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+        options: >-
+          --health-cmd "curl -fsS http://localhost:9200/_cluster/health >/dev/null"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e ".[elasticsearch]"
+      - run: crlab data download --out data/raw/anthropic
+      - run: crlab data validate --data-dir data/raw/anthropic --expect-official
+      - run: crlab eval run --experiment E02 --lexical-backend elasticsearch --es-index crlab_official_e02 --out runs/e02-elasticsearch
+      - run: crlab context generate --provider metadata --out runs/metadata-context
+      - run: crlab eval run --experiment E05 --context-dir runs/metadata-context --lexical-backend elasticsearch --es-index crlab_metadata_e05 --out runs/e05-elasticsearch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase4-es-bm25-results
+          path: |
+            runs/e02-elasticsearch/
+            runs/e05-elasticsearch/
