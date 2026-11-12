@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "name": "phase4-e01-e10",
+  "settings": {
+    "cutoffs": [
+      5,
+      10,
+      20
+    ],
+    "candidate_pool": 150,
+    "semantic_weight": 0.8,
+    "bm25_weight": 0.2,
+    "rerank_mode": "fixed",
+    "lexical_backend": "elasticsearch"
+  },
+  "experiments": [
+    {
+      "id": "E01",
+      "method": "vector",
+      "context": false,
+      "rerank": false
+    },
+    {
+      "id": "E02",
+      "method": "bm25",
+      "context": false,
+      "rerank": false
+    },
+    {
+      "id": "E03",
+      "method": "hybrid",
+      "context": false,
+      "rerank": false
+    },
+    {
+      "id": "E04",
+      "method": "vector",
+      "context": true,
+      "rerank": false
+    },
+    {
+      "id": "E05",
+      "method": "bm25",
+      "context": true,
+      "rerank": false
+    },
+    {
+      "id": "E06",
+      "method": "hybrid",
+      "context": true,
+      "rerank": false
+    },
+    {
+      "id": "E07",
+      "method": "vector",
+      "context": false,
+      "rerank": true
+    },
+    {
+      "id": "E08",
+      "method": "vector",
+      "context": true,
+      "rerank": true
+    },
+    {
+      "id": "E09",
+      "method": "hybrid",
+      "context": false,
+      "rerank": true
+    },
+    {
+      "id": "E10",
+      "method": "hybrid",
+      "context": true,
+      "rerank": true
+    }
+  ]
+}
