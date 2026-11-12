@@ -6,7 +6,7 @@ from crlab.datasets.anthropic import load_dataset
 
 base = Path("data/raw/anthropic")
 ds = load_dataset(base / "codebase_chunks.json", base / "evaluation_set.jsonl")
-expected = (9, 737, 248)
+expected = (90, 737, 248)
 actual = (ds.document_count, len(ds.chunks), len(ds.queries))
 print(f"documents/chunks/queries: {actual}, expected reference: {expected}")
 if actual != expected:

@@ -36,7 +36,7 @@ By default no API key is loaded or sent by the repository. Do not commit credent
 
 ## Core research contracts
 
-- The original 9-document/737-chunk/248-query figures are **reference metadata**, validated against downloaded files at execution time.
+- The original 90-document/737-chunk/248-query figures are **reference metadata**, validated against downloaded files at execution time.
 - Document identity uses original_uuid. Chunk identity uses (original_uuid, original_index), not chunk body text.
 - Metrics report both ID-based retrieval and the Cookbook's original content-matching legacy score. The latter can treat duplicated chunk bodies as equivalent.
 - Queries with no valid golden evidence fail validation by default.

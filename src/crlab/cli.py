@@ -66,7 +66,7 @@ def validate(data_dir: Path, *, expect_official: bool = False) -> None:
     }
     if expect_official and (
         counts["documents"], counts["chunks"], counts["queries"]
-    ) != (9, 737, 248):
+    ) != (90, 737, 248):
         raise ValueError(f"Official reference count mismatch: {counts}")
     print(json.dumps(counts, indent=2))
 
