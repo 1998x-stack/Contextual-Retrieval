@@ -92,3 +92,23 @@ jobs:
             reports/generated/es-paired/
             reports/generated/es-batch/
             reports/generated/es-leaderboard/
+
+  beir-scifact-document:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: crlab data beir-download --dataset scifact --out data/raw/beir
+      - run: crlab data validate --dataset beir --data-dir data/raw/beir/scifact
+      - run: crlab eval run --dataset beir --experiment E02 --data-dir data/raw/beir/scifact --out runs/beir-scifact-e02
+      - run: crlab report leaderboard --runs runs/beir-scifact-e02 --metric recall@20 --out reports/generated/beir-scifact
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase5-beir-scifact-document-results
+          path: |
+            data/raw/beir/scifact/source-manifest.json
+            runs/beir-scifact-e02/
+            reports/generated/beir-scifact/
