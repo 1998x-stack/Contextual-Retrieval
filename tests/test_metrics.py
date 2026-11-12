@@ -37,7 +37,7 @@ def test_failing_query_is_included_in_macro_average():
     q = Query("q", "absent", ("a",), ("A",))
     metrics = evaluate_query(q, [], {"a": "A"}, (1,))
     assert metrics["recall@1"] == 0.0
-    assert aggregate([{"recall@1": 1.0}, metrics | {"recall@1": 0.0}])["recall@1"] == 0.5
+    assert aggregate([{"recall@1": 1.0}, {"recall@1": metrics["recall@1"]}])["recall@1"] == 0.5
 
 
 def test_invalid_cutoff_fails():
