@@ -99,6 +99,9 @@ def generate_context_bundle(
         "strategy": contextualizer.strategy,
         "model": contextualizer.model,
         "prompt_version": contextualizer.prompt_version,
+        "prompt_fingerprint": getattr(
+            contextualizer, "prompt_fingerprint", contextualizer.prompt_version
+        ),
         "max_output_tokens": contextualizer.max_output_tokens,
         "prompt_cache_enabled": contextualizer.cache_enabled,
         "chunk_count": len(records),

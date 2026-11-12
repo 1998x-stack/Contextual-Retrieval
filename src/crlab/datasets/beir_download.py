@@ -17,6 +17,8 @@ OFFICIAL_SCIFACT_URL = (
 )
 # Official BEIR data wiki checksum (MD5; preserved solely for version matching).
 OFFICIAL_SCIFACT_MD5 = "5f7d1de60b170fc8027bb7898e2efca1"
+# Strong pin captured from the successfully verified 2026-11-12 official archive.
+OFFICIAL_SCIFACT_SHA256 = "536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165"
 MAX_ZIP_BYTES = 50 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 150 * 1024 * 1024
 
@@ -54,6 +56,8 @@ def download_scifact(root: str | Path) -> dict:
                     writer.write(chunk)
         if md5.hexdigest() != OFFICIAL_SCIFACT_MD5:
             raise ValueError("SciFact archive checksum differs from official BEIR MD5")
+        if sha256.hexdigest() != OFFICIAL_SCIFACT_SHA256:
+            raise ValueError("SciFact archive SHA-256 differs from pinned official snapshot")
         extracted = 0
         with zipfile.ZipFile(archive) as bundle:
             for info in bundle.infolist():
@@ -84,6 +88,7 @@ def download_scifact(root: str | Path) -> dict:
             "dataset": "scifact",
             "source_url": OFFICIAL_SCIFACT_URL,
             "official_zip_md5": OFFICIAL_SCIFACT_MD5,
+            "pinned_zip_sha256": OFFICIAL_SCIFACT_SHA256,
             "downloaded_zip_sha256": sha256.hexdigest(),
             "archive_bytes": consumed,
             "extracted_bytes": extracted,

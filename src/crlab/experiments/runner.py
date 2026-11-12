@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import shutil
+import tempfile
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +41,23 @@ def file_hash(path: str | Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             hasher.update(block)
     return hasher.hexdigest()
+
+
+def _validate_reranked(
+    candidates: Sequence[SearchHit], reranked: Sequence[SearchHit], *, k: int,
+) -> None:
+    """Fail before scoring if a provider returns fabricated or duplicated evidence."""
+    expected = min(k, len(candidates))
+    if len(reranked) != expected:
+        raise ValueError("Reranker returned an unexpected number of candidates")
+    allowed = {hit.chunk_id for hit in candidates}
+    seen: set[str] = set()
+    for rank, hit in enumerate(reranked, start=1):
+        if hit.chunk_id not in allowed or hit.chunk_id in seen:
+            raise ValueError("Reranker returned an unknown or duplicate candidate ID")
+        if hit.rank != rank or not math.isfinite(hit.score):
+            raise ValueError("Reranker returned invalid ranks or nonfinite scores")
+        seen.add(hit.chunk_id)
 
 
 def run(
@@ -139,8 +159,7 @@ def run(
                     context_by_id=context_by_id,
                     top_k=k,
                 )
-                if len(reranked) != min(k, len(raw_candidates)):
-                    raise ValueError("Reranker returned an unexpected number of candidates")
+                _validate_reranked(raw_candidates, reranked, k=k)
                 scores.update(evaluate_query(query, reranked, original_by_id, (k,)))
                 rankings_by_cutoff[str(k)] = [asdict(hit) for hit in reranked]
                 candidates_by_cutoff[str(k)] = [asdict(hit) for hit in raw_candidates]
@@ -176,8 +195,7 @@ def run(
                     context_by_id=context_by_id,
                     top_k=max(cutoffs),
                 )
-                if len(ranked) != min(max(cutoffs), len(candidates)):
-                    raise ValueError("Reranker returned an unexpected number of candidates")
+                _validate_reranked(candidates, ranked, k=max(cutoffs))
             else:
                 ranked = candidates
             scores = evaluate_query(query, ranked, original_by_id, cutoffs)
@@ -215,9 +233,8 @@ def save_run(
     query_source_path: str | Path | None = None,
 ) -> None:
     path = Path(out)
-    if path.exists() and any(path.iterdir()):
+    if path.exists():
         raise FileExistsError(f"Refusing to overwrite run artifacts in {path}")
-    path.mkdir(parents=True, exist_ok=True)
     manifest = {
         "schema_version": 2,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -246,6 +263,7 @@ def save_run(
                 "strategy": context_manifest["strategy"],
                 "model": context_manifest["model"],
                 "prompt_version": context_manifest["prompt_version"],
+                "prompt_fingerprint": context_manifest.get("prompt_fingerprint"),
                 "records_sha256": context_manifest["records_sha256"],
             } if context_manifest is not None else None
         ),
@@ -255,13 +273,25 @@ def save_run(
             "ties sorted by chunk_id. Local BM25 is not Elasticsearch parity."
         ),
     }
-    (path / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
-    (path / "metrics.json").write_text(
-        json.dumps(scores, indent=2, sort_keys=True) + "\n", encoding="utf-8",
-    )
-    with (path / "per_query.jsonl").open("w", encoding="utf-8") as stream:
-        for row in per_query:
-            stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+    # Stage complete artifacts in a sibling directory. No partial "succeeded"
+    # manifest is exposed if JSON serialization or disk writes fail.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=f".{path.name}.partial-", dir=path.parent))
+    try:
+        (staging / "metrics.json").write_text(
+            json.dumps(scores, indent=2, sort_keys=True, allow_nan=False) + "\n",
+            encoding="utf-8",
+        )
+        with (staging / "per_query.jsonl").open("w", encoding="utf-8") as stream:
+            for row in per_query:
+                stream.write(json.dumps(row, ensure_ascii=False, allow_nan=False) + "\n")
+        (staging / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        if path.exists():
+            raise FileExistsError(f"Refusing to overwrite run artifacts in {path}")
+        staging.rename(path)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
