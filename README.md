@@ -10,7 +10,8 @@ This repository distinguishes **official reference numbers**, **independent repr
 - Phase 1: Anthropic codebase corpus/evaluation adapter with stable IDs; ID-based and Cookbook-compatible metrics.
 - Phase 2: exact dot-product vector retrieval, local BM25, weighted rank fusion, CLI, JSONL ranking artifacts, deterministic tests.
 - Phase 3: offline metadata control, official Claude contextualizer, prompt caching, resumable SQLite context cache, checksum-validated context bundles, E04–E06 retrieval integration.
-- Planned: Elasticsearch parity, Cohere reranking, cross-dataset evaluation, Agent Memory.
+- Phase 4: Elasticsearch English-analyzer BM25, Cohere rerank adapter, E01–E10 registry, and fixed-pool versus Cookbook rerank evaluation.
+- Planned: cross-dataset evaluation, statistical significance, Agent Memory.
 
 ## Quickstart
 
@@ -66,6 +67,32 @@ crlab eval run --method hybrid --context-dir runs/claude-context --embedding-mod
 
 See [Phase 3 design](docs/05-contextualization-engine.md) for data provenance, cache invalidation and limitations.
 
+## Phase 4: Elasticsearch and Reranking
+
+Install optional adapters, and start a local Elasticsearch 8 server (see docs/06-phase4.md):
+
+~~~bash
+python -m pip install -e ".[dev,elasticsearch,cohere]"
+docker compose up -d elasticsearch
+crlab matrix list
+# E02, original BM25 on the official corpus, with Elasticsearch analyzer:
+crlab eval run --experiment E02 --lexical-backend elasticsearch --es-index crlab_e02 --out runs/e02-es
+# E05, contextual BM25, using an existing context bundle:
+crlab eval run --experiment E05 --context-dir runs/claude-context --lexical-backend elasticsearch --es-index crlab_e05 --out runs/e05-es
+~~~
+
+Elasticsearch refuses to reuse an existing named index by default. Add `--es-recreate-index` only when deliberately replacing this experiment's index. The `crlab_` prefix is required.
+
+For a *billable* reranking run, configure `COHERE_API_KEY`, `VOYAGE_API_KEY`, an explicit available rerank model ID and `--allow-paid-api`. Two modes exist: `--rerank-mode fixed` uses a common 150-candidate pool, while `--rerank-mode cookbook` uses a vector-only K×10 candidate pool for each K (Cookbook example semantics). E09/E10 require `fixed` mode.
+
+~~~bash
+crlab eval run --experiment E08 --context-dir runs/claude-context \
+  --rerank-model YOUR_COHERE_MODEL_ID --rerank-mode cookbook \
+  --allow-paid-api --out runs/e08-rerank
+~~~
+
+See [Phase 4 design and reproduction table](docs/06-phase4.md).
+
 ## Core research contracts
 
 - The original 90-document/737-chunk/248-query figures are **reference metadata**, validated against downloaded files at execution time.
@@ -85,6 +112,7 @@ See [Phase 3 design](docs/05-contextualization-engine.md) for data provenance, c
 - [Evaluation protocol](docs/03-evaluation-protocol.md)
 - [Experiment matrix](docs/04-experiment-matrix.md)
 - [Contextualization engine](docs/05-contextualization-engine.md)
+- [Phase 4: BM25 and reranking](docs/06-phase4.md)
 
 ## Provenance
 

@@ -14,6 +14,7 @@ from crlab.contextualization.artifacts import generate_context_bundle, load_cont
 from crlab.contextualization.engine import AnthropicContextualizer, MetadataContextualizer
 from crlab.datasets.anthropic import load_dataset
 from crlab.experiments.runner import file_hash, run, save_run
+from crlab.experiments.matrix import PHASE4_EXPERIMENTS, experiment_spec
 
 OFFICIAL_BASE = (
     "https://raw.githubusercontent.com/anthropics/claude-cookbooks/"
@@ -86,6 +87,23 @@ def validate(data_dir: Path, *, expect_official: bool = False) -> None:
 
 
 def evaluate(args: argparse.Namespace) -> None:
+    if args.experiment is not None:
+        spec = experiment_spec(args.experiment)
+        if args.method is not None and args.method != spec.method:
+            raise ValueError(f"{spec.experiment_id} requires --method {spec.method}")
+        if spec.use_context != (args.context_dir is not None):
+            raise ValueError(f"{spec.experiment_id}: context bundle required={spec.use_context}")
+        if spec.rerank != (args.rerank_model is not None):
+            raise ValueError(f"{spec.experiment_id}: reranker required={spec.rerank}")
+        method = spec.method
+    else:
+        if args.method is None:
+            raise ValueError("--method or --experiment is required")
+        method = args.method
+    if args.rerank_model is not None and not args.allow_paid_api:
+        raise RuntimeError("Reranking is billable: pass --allow-paid-api")
+    if args.rerank_mode == "cookbook" and (args.rerank_model is None or method != "vector"):
+        raise ValueError("Cookbook rerank mode needs vector and --rerank-model")
     corpus, eval_file = _files(Path(args.data_dir))
     dataset = load_dataset(corpus, eval_file)
     contexts = None
@@ -96,8 +114,12 @@ def evaluate(args: argparse.Namespace) -> None:
         )
         contexts = bundle.contexts
         context_manifest = bundle.manifest
+    reranker = None
+    if args.rerank_model is not None:
+        from crlab.reranking.cohere import CohereReranker
+        reranker = CohereReranker(args.rerank_model)
     embedder = None
-    if args.method in {"vector", "hybrid"}:
+    if method in {"vector", "hybrid"}:
         if not args.allow_paid_api:
             raise RuntimeError(
                 "Vector/Hybrid may make billable API requests; pass --allow-paid-api"
@@ -111,16 +133,22 @@ def evaluate(args: argparse.Namespace) -> None:
     weights = (args.semantic_weight, args.bm25_weight)
     scores, rows = run(
         dataset,
-        method=args.method,
+        method=method,
         embedder=embedder,
         candidate_pool=args.candidate_pool,
         semantic_weight=weights[0],
         bm25_weight=weights[1],
         context_by_id=contexts,
+        lexical_backend=args.lexical_backend,
+        es_index_name=args.es_index,
+        elasticsearch_url=args.es_url,
+        es_recreate=args.es_recreate_index,
+        reranker=reranker,
+        rerank_mode=args.rerank_mode,
     )
     save_run(
         args.out,
-        method=args.method,
+        method=method,
         scores=scores,
         per_query=rows,
         corpus_path=corpus,
@@ -129,6 +157,11 @@ def evaluate(args: argparse.Namespace) -> None:
         candidate_pool=args.candidate_pool,
         weights=weights,
         context_manifest=context_manifest,
+        lexical_backend=args.lexical_backend,
+        es_index_name=args.es_index,
+        reranker_model=args.rerank_model,
+        rerank_mode=args.rerank_mode,
+        experiment_id=args.experiment,
     )
     print(json.dumps({"out": args.out, "metrics": scores}, indent=2))
 
@@ -166,6 +199,15 @@ def context_validate(args: argparse.Namespace) -> None:
         "cache_hits": bundle.manifest["cache_hits"],
         "cache_misses": bundle.manifest["cache_misses"],
     }, indent=2))
+
+
+def list_matrix() -> None:
+    for spec in PHASE4_EXPERIMENTS.values():
+        print(
+            f"{spec.experiment_id} "
+            f"method={spec.method:<6} context={str(spec.use_context):<5} "
+            f"rerank={spec.rerank}"
+        )
 
 
 def compare(paths: list[Path]) -> None:
@@ -212,7 +254,8 @@ def main(argv: list[str] | None = None) -> None:
     eval_sub = evaluation.add_subparsers(dest="eval_cmd", required=True)
     run_parser = eval_sub.add_parser("run")
     run_parser.add_argument("--data-dir", default="data/raw/anthropic")
-    run_parser.add_argument("--method", choices=["bm25", "vector", "hybrid"], required=True)
+    run_parser.add_argument("--method", choices=["bm25", "vector", "hybrid"])
+    run_parser.add_argument("--experiment", choices=sorted(PHASE4_EXPERIMENTS))
     run_parser.add_argument("--out", required=True)
     run_parser.add_argument("--embedding-model", default="voyage-2")
     run_parser.add_argument("--context-dir", type=Path, default=None)
@@ -221,6 +264,16 @@ def main(argv: list[str] | None = None) -> None:
     run_parser.add_argument("--candidate-pool", type=int, default=150)
     run_parser.add_argument("--semantic-weight", type=float, default=0.8)
     run_parser.add_argument("--bm25-weight", type=float, default=0.2)
+    run_parser.add_argument("--lexical-backend", choices=["local", "elasticsearch"], default="local")
+    run_parser.add_argument("--es-url", default="http://localhost:9200")
+    run_parser.add_argument("--es-index", default=None)
+    run_parser.add_argument("--es-recreate-index", action="store_true")
+    run_parser.add_argument("--rerank-model", default=None)
+    run_parser.add_argument("--rerank-mode", choices=["fixed", "cookbook"], default="fixed")
+
+    matrix_parser = subs.add_parser("matrix", help="List E01-E10 experiment recipes")
+    matrix_sub = matrix_parser.add_subparsers(dest="matrix_cmd", required=True)
+    matrix_sub.add_parser("list")
 
     report = subs.add_parser("report", help="Compare executed runs")
     report_sub = report.add_subparsers(dest="report_cmd", required=True)
@@ -241,6 +294,8 @@ def main(argv: list[str] | None = None) -> None:
                 context_validate(args)
         elif args.namespace == "eval":
             evaluate(args)
+        elif args.namespace == "matrix":
+            list_matrix()
         else:
             compare(args.runs)
     except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
