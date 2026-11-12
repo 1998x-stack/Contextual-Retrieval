@@ -42,12 +42,13 @@ def test_plan_enables_all_when_explicit_parameters_are_supplied(tmp_path):
 
 
 def test_plan_rejects_invalid_rerank_mode_and_duplicate_ids(tmp_path):
-    with pytest.raises(ValueError, match="vector-only"):
-        plan_matrix(
-            ["E10"], data_dir="fixture", out_root=str(tmp_path),
-            context_dir="/contexts", rerank_model="model",
-            rerank_mode="cookbook", allow_paid_api=True,
-        )
+    planned = plan_matrix(
+        ["E10"], data_dir="fixture", out_root=str(tmp_path),
+        context_dir="/contexts", rerank_model="model",
+        rerank_mode="cookbook", allow_paid_api=True,
+    )
+    assert planned[0]["status"] == "blocked"
+    assert "Cookbook rerank mode is vector-only" in planned[0]["blockers"]
     with pytest.raises(ValueError, match="Duplicate experiment"):
         plan_matrix(["E02", "e02"], data_dir="fixture", out_root=str(tmp_path))
 
