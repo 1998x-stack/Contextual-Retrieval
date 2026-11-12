@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,12 +118,24 @@ def generate_context_bundle(
             "Usage counts only new API generations, not reused local-cache records."
         ),
     }
-    output_dir.mkdir(parents=True, exist_ok=False)
-    (output_dir / "contexts.jsonl").write_text(jsonl_text, encoding="utf-8")
-    (output_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    # Keep expensive generations restartable in SQLite, while publishing
+    # only a complete, checksum-verified bundle to its final output path.
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(
+        prefix=f".{output_dir.name}.partial-", dir=output_dir.parent
+    ))
+    try:
+        (staging / "contexts.jsonl").write_text(jsonl_text, encoding="utf-8")
+        (staging / "manifest.json").write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        if output_dir.exists():
+            raise FileExistsError(f"Output path already exists: {output_dir}")
+        staging.rename(output_dir)
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
     return manifest
 
 
