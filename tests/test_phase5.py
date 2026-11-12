@@ -278,3 +278,14 @@ def test_cli_batch_and_pareto_end_to_end(synthetic_runs, tmp_path, capsys):
         "--metric", "recall@1", "--out", str(board),
     ])
     assert (board / "leaderboard.json").exists()
+
+
+
+def test_tampered_query_ranking_is_detected_even_if_scores_look_consistent(synthetic_runs):
+    left, _, _ = synthetic_runs
+    ranking_file = left / "per_query.jsonl"
+    rows = [json.loads(line) for line in ranking_file.read_text().splitlines()]
+    rows[0]["rankings"][0]["chunk_id"] = "doc-A:0"  # now gold at rank 1
+    ranking_file.write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    with pytest.raises(ValueError, match="Ranking and ID metric disagree"):
+        load_run(left)
