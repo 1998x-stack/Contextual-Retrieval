@@ -125,6 +125,7 @@ def test_scifact_downloader_verifies_archive_and_manifest(monkeypatch, tmp_path)
                          "query-id\tcorpus-id\tscore\nq\td\t1\n")
     data = buffer.getvalue()
     monkeypatch.setattr(source, "OFFICIAL_SCIFACT_MD5", hashlib.md5(data).hexdigest())
+    monkeypatch.setattr(source, "OFFICIAL_SCIFACT_SHA256", hashlib.sha256(data).hexdigest())
     monkeypatch.setattr(
         source.urllib.request, "urlopen",
         lambda *args, **kwargs: io.BytesIO(data),
@@ -163,6 +164,7 @@ def test_scifact_downloader_rejects_zip_path_traversal(monkeypatch, tmp_path):
         archive.writestr("scifact/../escape.txt", "must not escape")
     data = buffer.getvalue()
     monkeypatch.setattr(source, "OFFICIAL_SCIFACT_MD5", hashlib.md5(data).hexdigest())
+    monkeypatch.setattr(source, "OFFICIAL_SCIFACT_SHA256", hashlib.sha256(data).hexdigest())
     monkeypatch.setattr(
         source.urllib.request, "urlopen",
         lambda *args, **kwargs: io.BytesIO(data),
@@ -170,3 +172,26 @@ def test_scifact_downloader_rejects_zip_path_traversal(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="Unsafe archive path"):
         source.download_scifact(tmp_path / "downloads")
     assert not (tmp_path / "downloads" / "scifact").exists()
+
+
+
+def test_scifact_sha256_check_blocks_changed_archive_despite_expected_md5(monkeypatch, tmp_path):
+    import hashlib
+    import io
+    import zipfile
+    import crlab.datasets.beir_download as source
+
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr("scifact/corpus.jsonl", '{"_id":"a","text":"A"}\n')
+        archive.writestr("scifact/queries.jsonl", '{"_id":"q","text":"Q"}\n')
+        archive.writestr("scifact/qrels/test.tsv",
+                         "query-id\tcorpus-id\tscore\nq\ta\t1\n")
+    payload = stream.getvalue()
+    monkeypatch.setattr(source, "OFFICIAL_SCIFACT_MD5", hashlib.md5(payload).hexdigest())
+    monkeypatch.setattr(source, "OFFICIAL_SCIFACT_SHA256", "0" * 64)
+    monkeypatch.setattr(source.urllib.request, "urlopen",
+                        lambda *args, **kwargs: io.BytesIO(payload))
+    with pytest.raises(ValueError, match="SHA-256"):
+        source.download_scifact(tmp_path / "isolated")
+    assert not (tmp_path / "isolated" / "scifact").exists()
