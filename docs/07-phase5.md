@@ -6,7 +6,7 @@ Every conclusion must follow from an executed run artifact, not a historical pap
 
 ## Architecture
 
-- analysis/io.py: verifies manifest schema, success status, full Query IDs and Golden Chunk identities, finite and bounded metrics, and aggregate-to-query consistency. A pair must have the same corpus_sha256 and evaluation_sha256 and exactly the same Query text/Golden IDs.
+- analysis/io.py: verifies manifest schema, success status, full Query IDs and Golden Chunk identities, finite and bounded metrics, aggregate-to-query consistency, and independent replay of Hit/Recall/MRR/NDCG/All-Evidence from stored original rankings. Legacy content-based Cookbook Pass cannot be fully replayed without the original corpus text, so it is range/aggregate validated. A pair must have the same corpus_sha256 and evaluation_sha256 and exactly the same Query text/Golden IDs.
 - analysis/statistics.py: seeded paired percentile Bootstrap for the mean Query-level quality difference, paired two-sided random sign-flip test and Holm step-down correction for a specified family of hypotheses. The Bootstrap supports resampling correlated Queries by user-supplied group_id.
 - analysis/comparison.py: per-Query delta, winning/losing examples, original and candidate first-gold ranks, category breakdown. No automatic query-type guessing; unknown categories remain unlabeled.
 - analysis/reporting.py: result JSON, query-level CSV/JSONL, Markdown, cross-model leaderboard grouped by dataset/Qrels identity, and cost-quality Pareto. Results are immutable by default (existing report paths are rejected).
