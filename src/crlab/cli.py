@@ -11,6 +11,12 @@ import urllib.request
 from pathlib import Path
 
 from crlab import __version__
+from crlab.analysis.comparison import compare_runs, load_query_labels
+from crlab.analysis.io import load_run
+from crlab.analysis.reporting import (
+    build_leaderboard, build_pareto, save_batch_report,
+    save_json_report, save_paired_report,
+)
 from crlab.contextualization.artifacts import generate_context_bundle, load_context_bundle
 from crlab.contextualization.engine import AnthropicContextualizer, MetadataContextualizer
 from crlab.datasets.anthropic import load_dataset
@@ -250,6 +256,47 @@ def compare(paths: list[Path]) -> None:
         )
 
 
+def report_analysis(args: argparse.Namespace) -> None:
+    if args.report_cmd == "compare":
+        compare(args.runs)
+        return
+    if args.report_cmd == "paired":
+        baseline = load_run(args.baseline)
+        candidate = load_run(args.candidate)
+        labels = load_query_labels(args.query_labels) if args.query_labels else None
+        summary, rows = compare_runs(
+            baseline, candidate, metric=args.metric,
+            resamples=args.resamples, permutations=args.permutations,
+            seed=args.seed, labels=labels,
+        )
+        save_paired_report(args.out, summary, rows)
+        print(json.dumps({"out": str(args.out), "summary": summary}, indent=2))
+    elif args.report_cmd == "batch":
+        baseline = load_run(args.baseline)
+        candidates = [load_run(path) for path in args.candidates]
+        labels = load_query_labels(args.query_labels) if args.query_labels else None
+        summary = save_batch_report(
+            baseline, candidates, metric=args.metric, output=args.out,
+            resamples=args.resamples, permutations=args.permutations,
+            seed=args.seed, labels=labels,
+        )
+        print(json.dumps({"out": str(args.out), "batch": summary}, indent=2))
+    elif args.report_cmd == "leaderboard":
+        data = build_leaderboard([load_run(path) for path in args.runs],
+                                 metric=args.metric)
+        save_json_report(args.out, data, kind="leaderboard")
+        print(json.dumps({"out": str(args.out), "leaderboard": data}, indent=2))
+    elif args.report_cmd == "pareto":
+        data = build_pareto(
+            [load_run(path) for path in args.runs],
+            metric=args.metric, costs_path=args.costs,
+        )
+        save_json_report(args.out, data, kind="pareto")
+        print(json.dumps({"out": str(args.out), "pareto": data}, indent=2))
+    else:
+        raise ValueError(f"Unsupported report command {args.report_cmd}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="crlab", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
@@ -325,6 +372,31 @@ def main(argv: list[str] | None = None) -> None:
     compare_parser = report_sub.add_parser("compare")
     compare_parser.add_argument("--runs", nargs="+", type=Path, required=True)
 
+    paired = report_sub.add_parser("paired", help="Paired CI, p-value and query deltas")
+    paired.add_argument("--baseline", type=Path, required=True)
+    paired.add_argument("--candidate", type=Path, required=True)
+    batch = report_sub.add_parser("batch", help="Paired CIs with Holm correction")
+    batch.add_argument("--baseline", type=Path, required=True)
+    batch.add_argument("--candidates", nargs="+", type=Path, required=True)
+    for statistical in (paired, batch):
+        statistical.add_argument("--metric", default="recall@20")
+        statistical.add_argument("--out", type=Path, required=True)
+        statistical.add_argument("--query-labels", type=Path, default=None)
+        statistical.add_argument("--resamples", type=int, default=2000)
+        statistical.add_argument("--permutations", type=int, default=5000)
+        statistical.add_argument("--seed", type=int, default=42)
+
+    leaderboard = report_sub.add_parser("leaderboard")
+    leaderboard.add_argument("--runs", nargs="+", type=Path, required=True)
+    leaderboard.add_argument("--metric", default="recall@20")
+    leaderboard.add_argument("--out", type=Path, required=True)
+
+    pareto = report_sub.add_parser("pareto")
+    pareto.add_argument("--runs", nargs="+", type=Path, required=True)
+    pareto.add_argument("--metric", default="recall@20")
+    pareto.add_argument("--costs", type=Path, required=True)
+    pareto.add_argument("--out", type=Path, required=True)
+
     args = parser.parse_args(argv)
     try:
         if args.namespace == "data":
@@ -345,7 +417,7 @@ def main(argv: list[str] | None = None) -> None:
             else:
                 run_matrix(args)
         else:
-            compare(args.runs)
+            report_analysis(args)
     except (ValueError, RuntimeError, FileNotFoundError, FileExistsError) as exc:
         parser.exit(2, f"error: {exc}\n")
 
