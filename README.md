@@ -32,7 +32,7 @@ crlab eval run --data-dir data/raw/anthropic --method vector --embedding-model v
 crlab eval run --data-dir data/raw/anthropic --method hybrid --embedding-model voyage-2 --out runs/hybrid-local
 ~~~
 
-By default no API key is loaded or sent by the repository. Do not commit credentials or generated proprietary data. Raw datasets are downloaded from Anthropic's public repository and are intentionally not vendored.
+By default no API key is loaded or sent by the repository. Do not commit credentials or generated proprietary data. Raw datasets are downloaded from a pinned Anthropic Cookbook commit (ce8b2629) and SHA-256 validated and are intentionally not vendored.
 
 ## Core research contracts
 

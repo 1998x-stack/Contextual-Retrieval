@@ -15,9 +15,13 @@ from crlab.experiments.runner import file_hash, run, save_run
 
 OFFICIAL_BASE = (
     "https://raw.githubusercontent.com/anthropics/claude-cookbooks/"
-    "main/capabilities/contextual-embeddings/data/"
+    "ce8b2629efe8b24048b127b4c79af1e9cbab93d4/capabilities/contextual-embeddings/data/"
 )
 RAW_FILENAMES = ("codebase_chunks.json", "evaluation_set.jsonl")
+OFFICIAL_SHA256 = {
+    "codebase_chunks.json": "70dbed1cb8a90a107b23742b1537051346860f841ec8b03734c1298fa4a34d46",
+    "evaluation_set.jsonl": "7186e2bed15547a2ed178134876b29e4abb206bf0394facbe61d58bf835ee073",
+}
 
 
 def _files(data_dir: Path) -> tuple[Path, Path]:
@@ -40,6 +44,9 @@ def download(data_dir: Path, force: bool = False) -> None:
                 with temporary.open("wb") as writer:
                     while block := response.read(1024 * 1024):
                         writer.write(block)
+            actual_hash = file_hash(temporary)
+            if actual_hash != OFFICIAL_SHA256[filename]:
+                raise ValueError(f"Official source checksum mismatch for {filename}")
             temporary.replace(target)
         finally:
             temporary.unlink(missing_ok=True)
@@ -68,6 +75,11 @@ def validate(data_dir: Path, *, expect_official: bool = False) -> None:
         counts["documents"], counts["chunks"], counts["queries"]
     ) != (90, 737, 248):
         raise ValueError(f"Official reference count mismatch: {counts}")
+    if expect_official and (
+        counts["corpus_sha256"] != OFFICIAL_SHA256[RAW_FILENAMES[0]]
+        or counts["evaluation_sha256"] != OFFICIAL_SHA256[RAW_FILENAMES[1]]
+    ):
+        raise ValueError("Official reference data checksum mismatch")
     print(json.dumps(counts, indent=2))
 
 

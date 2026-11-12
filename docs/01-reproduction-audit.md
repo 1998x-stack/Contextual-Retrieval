@@ -43,3 +43,11 @@ The current Cookbook's hybrid intermediate outputs and summary table are inconsi
 ## Source checks
 
 Download script records SHA-256 hashes at runtime. Do not substitute manually copied sample data for the public official corpus.
+
+## Verified data provenance (2026-11-12)
+
+- Source repository commit: anthropics/claude-cookbooks @ ce8b2629efe8b24048b127b4c79af1e9cbab93d4.
+- Corpus: 90 documents, 737 chunks; SHA-256 70dbed1cb8a90a107b23742b1537051346860f841ec8b03734c1298fa4a34d46 (1,126,046 bytes).
+- Qrels: 248 queries; SHA-256 7186e2bed15547a2ed178134876b29e4abb206bf0394facbe61d58bf835ee073 (3,571,229 bytes).
+- A previous planning description cited *9* documents: this was corrected after GitHub Actions downloaded and validated the actual JSON array.
+- The CLI now verifies the pinned source checksum and rejects unexpected bytes.
