@@ -217,3 +217,44 @@ def test_context_bundle_failure_never_exposes_partial_output(
         )
     assert not output.exists()
     assert not list(tmp_path.glob(".complete-only-context.partial-*"))
+
+
+
+def test_saved_ranking_replay_rejects_invalid_rank_or_missing_candidate(
+    sample_files, dataset, tmp_path,
+):
+    from crlab.analysis.io import load_run
+
+    class Fake:
+        model = "unused"
+        def rerank(self, query, candidates, *, original_by_id, context_by_id, top_k):
+            return [
+                SearchHit(hit.chunk_id, 1.0 - i / 10, i + 1, "fake")
+                for i, hit in enumerate(candidates[:top_k])
+            ]
+
+    scores, rows = run(
+        dataset, method="bm25", reranker=Fake(),
+        cutoffs=(1, 2), candidate_pool=3,
+    )
+    out = tmp_path / "published"
+    save_run(
+        out, method="bm25", scores=scores, per_query=rows,
+        corpus_path=sample_files[0], evaluation_path=sample_files[1],
+    )
+    assert load_run(out).queries
+
+    file = out / "per_query.jsonl"
+    original = file.read_text(encoding="utf-8")
+
+    records = [json.loads(line) for line in original.splitlines()]
+    records[0]["rankings"][0]["rank"] = 99
+    file.write_text("\n".join(json.dumps(row) for row in records) + "\n")
+    with pytest.raises(ValueError, match="Invalid rank"):
+        load_run(out)
+
+    records = [json.loads(line) for line in original.splitlines()]
+    records[0]["candidate_rankings"] = []
+    file.write_text("\n".join(json.dumps(row) for row in records) + "\n")
+    with pytest.raises(ValueError, match="Saved reranking"):
+        load_run(out)
