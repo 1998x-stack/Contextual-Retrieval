@@ -191,3 +191,29 @@ def test_embedding_input_mode_reaches_every_matrix_command(tmp_path):
     )
     cmd = sweep[0]["experiments"][0]["command"]
     assert cmd[cmd.index("--embedding-input-mode") + 1] == "asymmetric"
+
+
+
+def test_context_bundle_failure_never_exposes_partial_output(
+    sample_files, tmp_path, monkeypatch,
+):
+    from pathlib import Path
+    from crlab.contextualization.artifacts import generate_context_bundle
+
+    original_write = Path.write_text
+
+    def failed_manifest_write(self, data, *args, **kwargs):
+        if self.name == "manifest.json":
+            raise OSError("simulated disk failure")
+        return original_write(self, data, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", failed_manifest_write)
+    output = tmp_path / "complete-only-context"
+    with pytest.raises(OSError, match="disk failure"):
+        generate_context_bundle(
+            sample_files[0], sample_files[1], output,
+            MetadataContextualizer(),
+            cache_path=tmp_path / "context-cache.sqlite3",
+        )
+    assert not output.exists()
+    assert not list(tmp_path.glob(".complete-only-context.partial-*"))
