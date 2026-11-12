@@ -16,3 +16,19 @@ jobs:
       - run: pytest -q
       - run: python -m compileall -q src
       - run: crlab --help
+
+  official-local-bm25:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - run: crlab data download --out data/raw/anthropic
+      - run: crlab data validate --data-dir data/raw/anthropic --expect-official
+      - run: crlab eval run --data-dir data/raw/anthropic --method bm25 --out runs/official-local-bm25
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-local-bm25-results
+          path: runs/official-local-bm25/
