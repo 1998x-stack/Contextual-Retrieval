@@ -9,6 +9,51 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
+from crlab.evaluation.metrics import evaluate_query
+from crlab.schemas import Query, SearchHit
+
+
+def _verify_id_metrics(row: dict, run_path: Path) -> None:
+    """Replay all ID-based metrics using persisted rankings rather than trusted scores.
+
+    Legacy Cookbook content matching is not reconstructible without raw texts,
+    so its values are checked for bounds and aggregate consistency separately.
+    """
+    measured = row["metrics"]
+    keys = ("hit", "recall", "all_evidence", "mrr", "ndcg")
+    cutoffs = sorted({
+        int(name.rsplit("@", 1)[1])
+        for name in measured
+        if "@" in name and name.split("@", 1)[0] in keys
+    })
+    query = Query(
+        query_id=row["query_id"],
+        text=row["query"],
+        golden_chunk_ids=tuple(row["gold_chunk_ids"]),
+        golden_contents=tuple("gold-" + str(i) for i in range(len(row["gold_chunk_ids"]))),
+    )
+    for k in cutoffs:
+        by_cutoff = row.get("rankings_by_cutoff")
+        entries = by_cutoff.get(str(k)) if by_cutoff is not None else row.get("rankings")
+        if not isinstance(entries, list):
+            raise ValueError(f"Missing saved ranking at cutoff {k}: {run_path}")
+        hits = []
+        for index, item in enumerate(entries, 1):
+            identity = item.get("chunk_id") if isinstance(item, dict) else None
+            if not isinstance(identity, str) or not identity:
+                raise ValueError(f"Invalid ranked chunk identity: {run_path}")
+            hits.append(SearchHit(identity, 0.0, index, "replayed"))
+        computed = evaluate_query(query, hits, {}, (k,))
+        for name in keys:
+            field = f"{name}@{k}"
+            if field in measured and not math.isclose(
+                measured[field], computed[field], abs_tol=1e-9, rel_tol=0
+            ):
+                raise ValueError(
+                    f"Ranking and ID metric disagree for {row['query_id']} "
+                    f"at {field}: {run_path}"
+                )
+
 
 class IncompatibleRuns(ValueError):
     """Comparisons would be invalid due to differing corpus, qrels or queries."""
@@ -82,6 +127,7 @@ def load_run(path: str | Path) -> Run:
                     raise ValueError(f"Invalid query-level metric {key!r}: {root}")
                 if not 0 <= value <= 1:
                     raise ValueError(f"Out-of-range query-level metric {key!r}: {root}")
+            _verify_id_metrics(row, root)
             rows[qid] = row
     if not rows or len(rows) != manifest.get("query_count"):
         raise ValueError(f"Missing or extra query rows in {root}")
